@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tessellatorium · M.C. Escher-style Design Studio</title>
+<link rel="preconnect" href="">
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">&#9670;</span>
+    <h1>Tessellatorium</h1>
+    <span class="tagline">an M.C.&nbsp;Escher-style drawing studio</span>
+  </div>
+  <ol class="steps" id="step-indicator">
+    <li data-step="style" class="active"><span>1</span>Choose a style</li>
+    <li data-step="design"><span>2</span>Design</li>
+    <li data-step="render"><span>3</span>Render</li>
+  </ol>
+</header>
+
+<main>
+  <!-- STEP 1: STYLE SELECTION -->
+  <section id="step-style" class="screen active">
+    <h2 class="screen-title">Choose your world</h2>
+    <p class="screen-sub">Every style shares one motif editor &mdash; design a tile once and see it
+       reflected, repeated, and warped across three different geometries.</p>
+    <div class="style-grid">
+      <button class="style-card" data-style="euclidean">
+        <canvas class="style-thumb" width="220" height="160" data-thumb="euclidean"></canvas>
+        <h3>Regular Tilings</h3>
+        <p>Interlocking tiles that tessellate the plane by translation &mdash; deform the edges and
+           they lock together like Escher's reptiles.</p>
+      </button>
+      <button class="style-card" data-style="sphere">
+        <canvas class="style-thumb" width="220" height="160" data-thumb="sphere"></canvas>
+        <h3>Reflecting Spheres</h3>
+        <p>A glossy sphere set in your patterned world, mirroring the scene around it &mdash;
+           after "Hand with a Reflecting Sphere".</p>
+      </button>
+      <button class="style-card" data-style="hyperbolic">
+        <canvas class="style-thumb" width="220" height="160" data-thumb="hyperbolic"></canvas>
+        <h3>Hyperbolic Planes</h3>
+        <p>Tiles shrinking toward an infinite horizon on the Poincar&eacute; disk &mdash;
+           the geometry of the "Circle Limit" series.</p>
+      </button>
+    </div>
+  </section>
+
+  <!-- STEP 2: DESIGN -->
+  <section id="step-design" class="screen">
+    <div class="design-layout">
+      <div class="design-tools">
+        <h2 class="panel-title">Motif editor</h2>
+        <p class="panel-hint" id="editor-hint">Drag the edge handles to shape the tile. Switch to the
+          pen to draw features inside it.</p>
+
+        <div class="toolgroup">
+          <span class="toolgroup-label">Tool</span>
+          <div class="btn-row" id="tool-buttons">
+            <button class="tool-btn active" data-tool="edges" title="Move the tile's edge handles">&#9633; Edges</button>
+            <button class="tool-btn" data-tool="draw" title="Draw a line of features">&#9998; Pen</button>
+            <button class="tool-btn" data-tool="blob" title="Draw a filled shape">&#9679; Blob</button>
+          </div>
+        </div>
+
+        <div class="toolgroup">
+          <span class="toolgroup-label">Ink</span>
+          <div class="swatches" id="ink-swatches"></div>
+          <label class="slider-row">Size <input type="range" id="pen-size" min="1" max="14" value="4"></label>
+        </div>
+
+        <div class="toolgroup">
+          <span class="toolgroup-label">Tile colours</span>
+          <div class="color-row">
+            <label>A <input type="color" id="colorA" value="#d8743b"></label>
+            <label>B <input type="color" id="colorB" value="#2f6f7a"></label>
+            <label>Bg <input type="color" id="colorBg" value="#f3ead6"></label>
+          </div>
+          <label class="check-row"><input type="checkbox" id="outline-toggle" checked> Tile outlines</label>
+        </div>
+
+        <div class="toolgroup" id="style-controls"><!-- style-specific controls injected here --></div>
+
+        <div class="toolgroup">
+          <div class="btn-row">
+            <button class="ghost-btn" id="undo-btn" title="Remove the last drawn stroke">&#8630; Undo stroke</button>
+            <button class="ghost-btn" id="clear-btn" title="Remove all drawn strokes">Clear ink</button>
+          </div>
+          <div class="btn-row">
+            <button class="ghost-btn" id="reset-tile-btn" title="Reset the tile back to a square">Reset tile shape</button>
+          </div>
+        </div>
+
+        <div class="nav-row">
+          <button class="ghost-btn" id="back-to-style">&#8592; Style</button>
+          <button class="primary-btn" id="to-render">Render &#8594;</button>
+        </div>
+      </div>
+
+      <div class="design-canvas-wrap">
+        <div class="canvas-card">
+          <div class="canvas-label">Tile <em id="cell-label">fundamental cell</em></div>
+          <canvas id="editor-canvas" width="460" height="460"></canvas>
+        </div>
+        <div class="canvas-card">
+          <div class="canvas-label">Live preview <em id="preview-label"></em></div>
+          <canvas id="preview-canvas" width="460" height="460"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3: RENDER -->
+  <section id="step-render" class="screen">
+    <div class="render-bar">
+      <button class="ghost-btn" id="back-to-design">&#8592; Keep editing</button>
+      <div class="render-title" id="render-title">Final render</div>
+      <div class="btn-row">
+        <button class="ghost-btn" id="rerender-btn">&#8635; Re-render</button>
+        <button class="primary-btn" id="download-btn">&#8681; Download PNG</button>
+        <button class="ghost-btn" id="restart-btn">Start over</button>
+      </div>
+    </div>
+    <div class="render-stage">
+      <canvas id="render-canvas" width="1100" height="780"></canvas>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="js/geometry.js"></script>
+<script src="js/euclidean.js"></script>
+<script src="js/sphere.js"></script>
+<script src="js/hyperbolic.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
