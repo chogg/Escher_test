@@ -66,18 +66,22 @@ cap); editor handle-drag + stroke drawing + mode switching; and a full
 
 ## Publishing (GitHub Pages)
 
-This repo includes a Pages workflow (`.github/workflows/pages.yml`). When Actions has
-Pages permission it self-enables and deploys on every push, serving at:
+The site is plain static files at the repo root, so it's publish-ready. Pages has to
+be **enabled once** by a repo admin (the Actions token isn't allowed to enable it
+automatically). Pick either option — both make the app live at:
 
 ```
 https://chogg.github.io/Escher_test/
 ```
 
-If the workflow's deploy step is blocked by branch/environment protection (common when
-deploying from a non-default branch), enable Pages manually in one step:
-**Settings → Pages → Build and deployment → Source: "Deploy from a branch" →**
-pick this branch and `/ (root)`. The site is plain static files at the repo root, so
-that's all it needs.
+**Option A — Deploy from a branch (simplest, ~1 minute, no Actions):**
+Settings → Pages → Build and deployment → Source: **Deploy from a branch** →
+Branch: `claude/intelligent-cerf-wnjccl`, folder **`/ (root)`** → Save.
+
+**Option B — GitHub Actions:**
+Settings → Pages → Source: **GitHub Actions**, then either merge this branch to `main`
+or run the included workflow manually (Actions tab → *Deploy to GitHub Pages* →
+*Run workflow* → pick this branch). See `.github/workflows/pages.yml`.
 
 ## The math, briefly
 

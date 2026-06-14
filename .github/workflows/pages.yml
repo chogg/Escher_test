@@ -1,13 +1,20 @@
 name: Deploy to GitHub Pages
 
 # Publishes the static site (index.html at repo root) to GitHub Pages.
-# `enablement: true` turns Pages on automatically the first time this runs,
-# provided Actions has permission. After that, every push redeploys.
-
+#
+# One-time setup is required because enabling Pages needs repo-admin rights that
+# the Actions token does not have by default. Either:
+#   A) Settings -> Pages -> Source: "Deploy from a branch" -> this branch, /(root).
+#      (Simplest — does not use this workflow at all.)
+#   B) Settings -> Pages -> Source: "GitHub Actions", then run this workflow
+#      (Actions tab -> "Deploy to GitHub Pages" -> Run workflow), or push to main.
+#
+# Triggered manually / on main only, so feature-branch pushes don't spam failed
+# runs while Pages is still disabled.
 on:
-  push:
-    branches: ["claude/intelligent-cerf-wnjccl", "main"]
   workflow_dispatch:
+  push:
+    branches: ["main"]
 
 permissions:
   contents: read
