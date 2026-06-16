@@ -267,8 +267,8 @@ check("editor edge-handles hidden in hyperbolic mode", function () {
 });
 check("editor shows linked handles on all four edges", function () {
   const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
-  // 2 interior nodes per editable edge x (primary + mirror) x 2 edges = 8 handles
-  assert(ed._handles().length === ed.nodeCount() * 2 * 2, "expected primary+mirror handles for top & left");
+  // each interior node is shown as primary + mirror -> 2 handles per node
+  assert(ed._handles().length === ed.nodeCount() * 2, "expected primary+mirror handles for both edges");
   // grabbing the linked mirror of a top node edits the same source point
   const d = ed.design, mir = { edge: "topEdge", i: 1, off: { x: 0, y: 1 } };
   const before = JSON.stringify(d.topEdge[1]);
@@ -277,25 +277,44 @@ check("editor shows linked handles on all four edges", function () {
   ed.active = null;
   assert(JSON.stringify(d.topEdge[1]) !== before, "dragging the mirror handle should edit the source node");
 });
-check("editor add / remove edge nodes (menu)", function () {
-  const d = design();
-  const ed = new E.Editor(makeCanvas(460, 460), d, function () {});
-  const n0 = ed.nodeCount();
-  assert(n0 === d.topEdge.length - 2);
-  assert(ed.addEdgeNode() === true);
-  assert(ed.nodeCount() === n0 + 1, "node count did not increase");
-  assert(d.topEdge.length === d.leftEdge.length, "edges fell out of sync");
-  assert(ed.removeEdgeNode() === true && ed.nodeCount() === n0, "remove did not restore");
-  let guard = 0;
-  while (ed.addEdgeNode() && guard < 50) guard++;
-  assert(ed.nodeCount() <= 7, "exceeded MAX_NODES: " + ed.nodeCount());
+check("Add node is placed at the clicked location (armed flow)", function () {
+  const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
+  const top0 = ed.design.topEdge.length;
+  ed.armAddNode();
+  assert(ed.pendingNode === "add", "armAddNode should arm placement");
+  // click near the LEFT end of the top edge
+  ed._down({ clientX: ed.pad + 0.12 * ed.size, clientY: ed.pad + 2, pointerId: 1, preventDefault() {} });
+  assert(ed.pendingNode === null, "placement should disarm");
+  assert(ed.design.topEdge.length === top0 + 1, "a node should be added to the top edge");
+  assert(ed.design.topEdge.slice(1, -1).some(p => p.x < 0.25), "node placed near the click, not crammed mid-edge");
+  // second placement near the RIGHT end -> distinct location
+  ed.armAddNode();
+  ed._down({ clientX: ed.pad + 0.9 * ed.size, clientY: ed.pad + 2, pointerId: 1, preventDefault() {} });
+  assert(ed.design.topEdge.slice(1, -1).some(p => p.x > 0.8), "second node placed near the second click");
 });
-check("editor double-click inserts a node on an edge", function () {
+check("Remove node deletes the node nearest the click (armed flow)", function () {
+  const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
+  const top0 = ed.design.topEdge.length;
+  ed.armRemoveNode();
+  assert(ed.pendingNode === "remove");
+  const p = ed.toPx(ed.design.topEdge[1]);
+  ed._down({ clientX: p.x, clientY: p.y, pointerId: 1, preventDefault() {} });
+  assert(ed.pendingNode === null && ed.design.topEdge.length === top0 - 1, "nearest node should be removed");
+});
+check("double-click near an edge still inserts a node", function () {
   const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
   const n0 = ed.nodeCount();
-  // a point on the top edge (unit y=0)
-  assert(ed._insertAt({ x: ed.pad + 0.5 * ed.size, y: ed.pad }) === true, "did not insert on edge");
+  assert(ed._insertAt({ x: ed.pad + 0.5 * ed.size, y: ed.pad }, true) === true, "did not insert on edge");
   assert(ed.nodeCount() === n0 + 1, "node not added");
+});
+check("hyperbolic editor shows a fixed square tile (edge shape ignored)", function () {
+  const d = design({ style: "hyperbolic" });
+  d.topEdge = [{ x: 0, y: 0 }, { x: 0.33, y: -0.3 }, { x: 0.66, y: 0.3 }, { x: 1, y: 0 }]; // heavily deformed
+  const ed = new E.Editor(makeCanvas(460, 460), d, function () {});
+  ed.setEditEdges(false);
+  const b = ed._tileBoundary();
+  assert(b.length === 4, "expected a 4-corner square, got " + b.length);
+  assert(b[0].x === 0 && b[0].y === 0 && b[2].x === 1 && b[2].y === 1, "expected unit-square corners");
 });
 
 // ---- app.js: ensure it loads & boots without throwing ----

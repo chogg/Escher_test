@@ -86,11 +86,9 @@
 
         <div class="toolgroup">
           <div class="btn-row" id="edge-node-row">
-            <span class="stepper">Edge nodes
-              <button class="ghost-btn step-btn" id="node-minus" title="Remove a control point from the tile edges">&minus;</button>
-              <span id="node-count">2</span>
-              <button class="ghost-btn step-btn" id="node-plus" title="Add a control point to the tile edges (or double-click an edge)">+</button>
-            </span>
+            <span class="stepper">Edge nodes <span id="node-count">4</span></span>
+            <button class="ghost-btn" id="node-plus" title="Click, then click a tile edge to place a node there">&#43; Add node</button>
+            <button class="ghost-btn" id="node-minus" title="Click, then click a node to remove it">&minus; Remove</button>
           </div>
           <div class="btn-row">
             <button class="ghost-btn" id="undo-btn" title="Remove the last drawn stroke">&#8630; Undo stroke</button>

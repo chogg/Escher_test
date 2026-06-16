@@ -210,6 +210,17 @@
 
     if (!editor) {
       editor = new E.Editor($("editor-canvas"), design, function () { schedulePreview(); });
+      editor.onModeChange = function (mode) {
+        $("node-plus").classList.toggle("active", mode === "add");
+        $("node-minus").classList.toggle("active", mode === "remove");
+        $("editor-hint").textContent = mode === "add"
+          ? "Click on a tile edge to place a node at that spot."
+          : mode === "remove"
+            ? "Click a node to remove it."
+            : baseEditorHint();
+        updateNodeCount();
+      };
+      editor.onToast = toast;
     }
     var edgesOn = style !== "hyperbolic";
     editor.setEditEdges(edgesOn);
@@ -218,15 +229,19 @@
     edgesBtn.style.display = edgesOn ? "" : "none";
     if (!edgesOn) selectTool("draw"); else selectTool("edges");
 
-    $("editor-hint").textContent = edgesOn
-      ? "Drag the handles to shape the tile — opposite edges are linked (grabbing one highlights its mirror). Double-click an edge or use Edge nodes ± to add detail. Pen/Blob draw features."
-      : "Draw your motif with the pen or blob — it is mapped into every tile of the {p,q} tiling.";
-
+    editor.cancelPending();
+    $("editor-hint").textContent = baseEditorHint();
     $("edge-node-row").style.display = edgesOn ? "" : "none";
     updateNodeCount();
     buildStyleControls();
     editor.draw();
     schedulePreview();
+  }
+
+  function baseEditorHint() {
+    return design.style !== "hyperbolic"
+      ? "Drag the handles to shape the tile — opposite edges are linked (grabbing one highlights its mirror). Use 'Add node', then click an edge to add detail. Pen/Blob draw features."
+      : "Draw your motif with the pen or blob — it maps into every {p,q} tile (the tile is a fixed quadrilateral here).";
   }
 
   function updateNodeCount() {
@@ -282,16 +297,13 @@
       design.strokes = []; editor.draw(); schedulePreview(); toast("Ink cleared");
     });
     $("reset-tile-btn").addEventListener("click", function () {
+      if (editor) editor.cancelPending();
       design.topEdge = [{ x: 0, y: 0 }, { x: 0.33, y: 0 }, { x: 0.66, y: 0 }, { x: 1, y: 0 }];
       design.leftEdge = [{ x: 0, y: 0 }, { x: 0, y: 0.33 }, { x: 0, y: 0.66 }, { x: 0, y: 1 }];
       editor.draw(); updateNodeCount(); schedulePreview(); toast("Tile reset to a square");
     });
-    $("node-plus").addEventListener("click", function () {
-      if (editor && editor.addEdgeNode()) updateNodeCount(); else toast("Maximum edge detail reached");
-    });
-    $("node-minus").addEventListener("click", function () {
-      if (editor && editor.removeEdgeNode()) updateNodeCount(); else toast("Minimum is one edge node");
-    });
+    $("node-plus").addEventListener("click", function () { if (editor) editor.armAddNode(); });
+    $("node-minus").addEventListener("click", function () { if (editor) editor.armRemoveNode(); });
     // nav
     $("back-to-style").addEventListener("click", function () { show("style"); });
     $("to-render").addEventListener("click", doRender);
