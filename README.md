@@ -55,9 +55,16 @@ coordinate** — catching the real risks (bad geometry, NaNs, exceptions, runawa
 loops) across every renderer, the editor, and a full app boot.
 
 ```bash
-node test/run.js          # 28 checks: geometry, all 3 renderers, editor, app boot
-node test/preview-svg.js  # writes faithful SVGs to test/previews/
+node test/run.js          # 33 checks: geometry, all 3 renderers, editor, app boot
+node test/preview-svg.js  # faithful SVGs (euclidean / hyperbolic / editor) -> test/previews/
+node test/sphere-check.js # renders the mirror-ball reflection to PNG (equirect vs cube room)
+node test/editor-check.js # renders the editor's linked-spline UI to PNG
 ```
+
+The sphere reflection uses a **cube-room** environment lookup (a mirror ball in a
+tiled room) instead of an equirectangular wrap, which removes the unphysical
+pole-pinch singularity — matching how a real chrome light-probe ball reflects a
+room from a single viewpoint.
 
 It exercises: Euclidean at densities 3–12; spheres ×1/2/3 + full-res; hyperbolic
 across 8 different {p,q} (plus rejection of non-hyperbolic {p,q} and the cell-count

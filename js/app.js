@@ -219,12 +219,19 @@
     if (!edgesOn) selectTool("draw"); else selectTool("edges");
 
     $("editor-hint").textContent = edgesOn
-      ? "Drag the blue handles to shape the tile (the opposite edges mirror so tiles interlock). Use the pen or blob to draw features."
+      ? "Drag the handles to shape the tile — opposite edges are linked (grabbing one highlights its mirror). Double-click an edge or use Edge nodes ± to add detail. Pen/Blob draw features."
       : "Draw your motif with the pen or blob — it is mapped into every tile of the {p,q} tiling.";
 
+    $("edge-node-row").style.display = edgesOn ? "" : "none";
+    updateNodeCount();
     buildStyleControls();
     editor.draw();
     schedulePreview();
+  }
+
+  function updateNodeCount() {
+    var el = $("node-count");
+    if (el && editor) el.textContent = editor.nodeCount();
   }
 
   function selectTool(tool) {
@@ -277,7 +284,13 @@
     $("reset-tile-btn").addEventListener("click", function () {
       design.topEdge = [{ x: 0, y: 0 }, { x: 0.33, y: 0 }, { x: 0.66, y: 0 }, { x: 1, y: 0 }];
       design.leftEdge = [{ x: 0, y: 0 }, { x: 0, y: 0.33 }, { x: 0, y: 0.66 }, { x: 0, y: 1 }];
-      editor.draw(); schedulePreview(); toast("Tile reset to a square");
+      editor.draw(); updateNodeCount(); schedulePreview(); toast("Tile reset to a square");
+    });
+    $("node-plus").addEventListener("click", function () {
+      if (editor && editor.addEdgeNode()) updateNodeCount(); else toast("Maximum edge detail reached");
+    });
+    $("node-minus").addEventListener("click", function () {
+      if (editor && editor.removeEdgeNode()) updateNodeCount(); else toast("Minimum is one edge node");
     });
     // nav
     $("back-to-style").addEventListener("click", function () { show("style"); });

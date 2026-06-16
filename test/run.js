@@ -195,6 +195,19 @@ check("sphere full-res render", function () {
   E.sphere.render(ctx, 1100, 780, design({ style: "sphere" }), { envRes: 512 });
   assert(ctx._calls.putImageData > 0);
 });
+check("cubeFace mapping: finite, in-range, no pole singularity", function () {
+  for (let a = 0; a < 800; a++) {
+    const th = Math.random() * Math.PI, ph = Math.random() * 2 * Math.PI;
+    const Rx = Math.sin(th) * Math.cos(ph), Ry = Math.cos(th), Rz = Math.sin(th) * Math.sin(ph);
+    const f = E.sphere.cubeFace(Rx, Ry, Rz);
+    assert(Number.isFinite(f.u) && f.u >= 0 && f.u <= 1, "u out of range: " + f.u);
+    assert(Number.isFinite(f.v) && f.v >= 0 && f.v <= 1, "v out of range: " + f.v);
+    assert(Number.isFinite(f.bright) && f.bright > 0, "bad bright: " + f.bright);
+  }
+});
+check("cubeFace: ceiling brighter than floor (physical room shading)", function () {
+  assert(E.sphere.cubeFace(0, 1, 0).bright > E.sphere.cubeFace(0, -1, 0).bright, "ceiling should be brighter than floor");
+});
 
 console.log("\n== hyperbolic ==");
 [[6, 4], [4, 5], [3, 7], [7, 3], [5, 4], [8, 3], [4, 6], [5, 5]].forEach(function (pq) {
@@ -251,6 +264,38 @@ check("editor edge-handles hidden in hyperbolic mode", function () {
   const ed = new E.Editor(makeCanvas(460, 460), d, function () {});
   ed.setEditEdges(false);
   assert(ed.editEdges === false && ed.tool !== "edges", "should switch away from edges tool");
+});
+check("editor shows linked handles on all four edges", function () {
+  const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
+  // 2 interior nodes per editable edge x (primary + mirror) x 2 edges = 8 handles
+  assert(ed._handles().length === ed.nodeCount() * 2 * 2, "expected primary+mirror handles for top & left");
+  // grabbing the linked mirror of a top node edits the same source point
+  const d = ed.design, mir = { edge: "topEdge", i: 1, off: { x: 0, y: 1 } };
+  const before = JSON.stringify(d.topEdge[1]);
+  ed.active = { type: "handle", h: mir };
+  ed._move({ clientX: 230, clientY: 300 });
+  ed.active = null;
+  assert(JSON.stringify(d.topEdge[1]) !== before, "dragging the mirror handle should edit the source node");
+});
+check("editor add / remove edge nodes (menu)", function () {
+  const d = design();
+  const ed = new E.Editor(makeCanvas(460, 460), d, function () {});
+  const n0 = ed.nodeCount();
+  assert(n0 === d.topEdge.length - 2);
+  assert(ed.addEdgeNode() === true);
+  assert(ed.nodeCount() === n0 + 1, "node count did not increase");
+  assert(d.topEdge.length === d.leftEdge.length, "edges fell out of sync");
+  assert(ed.removeEdgeNode() === true && ed.nodeCount() === n0, "remove did not restore");
+  let guard = 0;
+  while (ed.addEdgeNode() && guard < 50) guard++;
+  assert(ed.nodeCount() <= 7, "exceeded MAX_NODES: " + ed.nodeCount());
+});
+check("editor double-click inserts a node on an edge", function () {
+  const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
+  const n0 = ed.nodeCount();
+  // a point on the top edge (unit y=0)
+  assert(ed._insertAt({ x: ed.pad + 0.5 * ed.size, y: ed.pad }) === true, "did not insert on edge");
+  assert(ed.nodeCount() === n0 + 1, "node not added");
 });
 
 // ---- app.js: ensure it loads & boots without throwing ----

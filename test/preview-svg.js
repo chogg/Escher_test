@@ -102,10 +102,47 @@ function hyperbolicSVG() {
   return out.join("\n");
 }
 
+// ---------------- Editor view (issue 1: linked splines + emphasis) ----------------
+function editorSVG() {
+  var d = design(), W = 460, H = 460, pad = 56, sz = W - pad * 2;
+  function M(u) { return { x: pad + u.x * sz, y: pad + u.y * sz }; }
+  function pl(pts, close) { var s = "M" + f(pts[0].x) + " " + f(pts[0].y); for (var i = 1; i < pts.length; i++) s += "L" + f(pts[i].x) + " " + f(pts[i].y); return close ? s + "Z" : s; }
+  var out = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">'];
+  out.push('<rect width="' + W + '" height="' + H + '" fill="#11100e"/>');
+  out.push('<rect x="' + pad + '" y="' + pad + '" width="' + sz + '" height="' + sz + '" fill="none" stroke="rgba(169,158,137,.25)" stroke-dasharray="4 5"/>');
+  // tile
+  out.push('<path d="' + pl(E.euclidean.tileBoundary(d).map(M), true) + '" fill="' + d.colorA + '" stroke="rgba(20,16,12,.7)" stroke-width="1.5"/>');
+  // edge splines: top(primary), bottom(=top+y), left(primary), right(=left+x). Emphasise the top pair.
+  function spline(edge, off, emph) {
+    var ctrl = d[edge].map(function (p) { return { x: p.x + off.x, y: p.y + off.y }; });
+    var pts = E.geom.catmullRom(ctrl, 12).map(M);
+    out.push('<path d="' + pl(pts, false) + '" fill="none" stroke="' + (emph ? "#f0c46a" : "rgba(127,176,182,.8)") + '" stroke-width="' + (emph ? 3.5 : 2) + '" stroke-linecap="round"/>');
+  }
+  spline("topEdge", { x: 0, y: 0 }, true);
+  spline("topEdge", { x: 0, y: 1 }, true);    // linked mirror (bottom)
+  spline("leftEdge", { x: 0, y: 0 }, false);
+  spline("leftEdge", { x: 1, y: 0 }, false);   // linked mirror (right)
+  // connector for the emphasised linked pair (topEdge[1] <-> its bottom mirror)
+  var src = d.topEdge[1], a = M(src), b = M({ x: src.x, y: src.y + 1 });
+  out.push('<path d="M' + f(a.x) + ' ' + f(a.y) + 'L' + f(b.x) + ' ' + f(b.y) + '" stroke="rgba(240,196,106,.55)" stroke-width="1.5" stroke-dasharray="3 4"/>');
+  // handles on all four edges (primary + mirror); emphasise top[1] pair
+  [["topEdge", { x: 0, y: 0 }], ["topEdge", { x: 0, y: 1 }], ["leftEdge", { x: 0, y: 0 }], ["leftEdge", { x: 1, y: 0 }]].forEach(function (pair) {
+    var edge = pair[0], off = pair[1], primary = off.x === 0 && off.y === 0;
+    for (var i = 1; i < d[edge].length - 1; i++) {
+      var p = M({ x: d[edge][i].x + off.x, y: d[edge][i].y + off.y });
+      var emph = edge === "topEdge" && i === 1;
+      out.push('<circle cx="' + f(p.x) + '" cy="' + f(p.y) + '" r="' + (emph ? 8.5 : 6.5) + '" fill="' + (emph ? "#f0c46a" : (primary ? "#7fb0b6" : "#56858b")) + '" stroke="#11100e" stroke-width="2"/>');
+    }
+  });
+  out.push('</svg>');
+  return out.join("\n");
+}
+
 var dir = path.join(root, "test", "previews");
 fs.mkdirSync(dir, { recursive: true });
 fs.writeFileSync(path.join(dir, "euclidean.svg"), euclideanSVG());
 fs.writeFileSync(path.join(dir, "hyperbolic.svg"), hyperbolicSVG());
+fs.writeFileSync(path.join(dir, "editor.svg"), editorSVG());
 console.log("wrote test/previews/euclidean.svg (" + E.euclidean.tileBoundary(design()).length + " boundary pts)");
 var hd = E.hyperbolic.tiles((function () { var x = design(); x.style = "hyperbolic"; return x; })(), 260);
 console.log("wrote test/previews/hyperbolic.svg (" + hd.tiles.length + " tiles)");

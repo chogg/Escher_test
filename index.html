@@ -85,6 +85,13 @@
         <div class="toolgroup" id="style-controls"><!-- style-specific controls injected here --></div>
 
         <div class="toolgroup">
+          <div class="btn-row" id="edge-node-row">
+            <span class="stepper">Edge nodes
+              <button class="ghost-btn step-btn" id="node-minus" title="Remove a control point from the tile edges">&minus;</button>
+              <span id="node-count">2</span>
+              <button class="ghost-btn step-btn" id="node-plus" title="Add a control point to the tile edges (or double-click an edge)">+</button>
+            </span>
+          </div>
           <div class="btn-row">
             <button class="ghost-btn" id="undo-btn" title="Remove the last drawn stroke">&#8630; Undo stroke</button>
             <button class="ghost-btn" id="clear-btn" title="Remove all drawn strokes">Clear ink</button>
@@ -125,7 +132,7 @@
       </div>
     </div>
     <div class="render-stage">
-      <canvas id="render-canvas" width="1100" height="780"></canvas>
+      <canvas id="render-canvas" width="990" height="700"></canvas>
     </div>
   </section>
 </main>
