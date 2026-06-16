@@ -8,8 +8,8 @@ Escher.euclidean = (function () {
   // editable top & left edges. Opposite edges are exact translations, so the
   // tile interlocks with its neighbours under integer translation (group p1).
   function tileBoundary(design) {
-    var top = G.catmullRom(design.topEdge, 10);    // (0,0) -> (1,0)
-    var left = G.catmullRom(design.leftEdge, 10);   // (0,0) -> (0,1)
+    var top = G.edgeCurve(design.topEdge, 14);    // (0,0) -> (1,0)
+    var left = G.edgeCurve(design.leftEdge, 14);   // (0,0) -> (0,1)
     var right = left.map(function (p) { return { x: p.x + 1, y: p.y }; });  // (1,0)->(1,1)
     var bottom = top.map(function (p) { return { x: p.x, y: p.y + 1 }; });  // (0,1)->(1,1)
 

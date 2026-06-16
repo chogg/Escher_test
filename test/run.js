@@ -160,6 +160,13 @@ check("mixHex midpoint", function () {
   // round(127.5) -> 128 -> 0x80
   assert(E.geom.mixHex("#000000", "#ffffff", 0.5).toLowerCase() === "#808080");
 });
+check("edgeCurve: flat by default, curves with an explicit tangent", function () {
+  const flat = E.geom.edgeCurve([{ x: 0, y: 0 }, { x: 0.5, y: 0 }, { x: 1, y: 0 }], 8);
+  flat.forEach(p => assert(Number.isFinite(p.x) && Number.isFinite(p.y)));
+  assert(Math.max(...flat.map(p => Math.abs(p.y))) < 1e-6, "default straight edge should stay flat");
+  const bent = E.geom.edgeCurve([{ x: 0, y: 0 }, { x: 0.5, y: 0, t: { x: 0.1, y: 0.3 } }, { x: 1, y: 0 }], 12);
+  assert(Math.max(...bent.map(p => Math.abs(p.y))) > 0.05, "explicit tangent should curve the edge");
+});
 
 console.log("\n== euclidean ==");
 check("tileBoundary closed & finite", function () {
@@ -306,6 +313,32 @@ check("double-click near an edge still inserts a node", function () {
   const n0 = ed.nodeCount();
   assert(ed._insertAt({ x: ed.pad + 0.5 * ed.size, y: ed.pad }, true) === true, "did not insert on edge");
   assert(ed.nodeCount() === n0 + 1, "node not added");
+});
+check("node lever sets the tangent (gradient + curvature), length clamped", function () {
+  const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
+  ed.emphasis = { edge: "topEdge", i: 1 };               // node is selected -> its lever exists
+  const out = ed._leverOut("topEdge", 1, { x: 0, y: 0 });
+  ed._down({ clientX: out.x, clientY: out.y, pointerId: 1, preventDefault() {} });
+  assert(ed.active && ed.active.type === "lever", "should grab the lever, got " + (ed.active && ed.active.type));
+  ed._move({ clientX: out.x + 12, clientY: out.y - 40, pointerId: 1 });
+  ed._up({});
+  const t = ed.design.topEdge[1].t;
+  assert(t && Number.isFinite(t.x) && Number.isFinite(t.y), "node tangent should be set");
+  assert(Math.hypot(t.x, t.y) <= 0.7 + 1e-9, "tangent length should be clamped");
+});
+check("levers only exist for the selected / hovered node", function () {
+  const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
+  ed.emphasis = null;
+  assert(ed._hitLever({ x: 100, y: 100 }) === null, "no lever should be hittable without a selected node");
+});
+check("dragging a node keeps its tangent lever", function () {
+  const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
+  ed.design.topEdge[1].t = { x: 0.05, y: 0.2 };
+  const p = ed.toPx(ed.design.topEdge[1]);
+  ed._down({ clientX: p.x, clientY: p.y, pointerId: 1, preventDefault() {} });
+  ed._move({ clientX: p.x + 20, clientY: p.y + 10, pointerId: 1 });
+  ed._up({});
+  assert(ed.design.topEdge[1].t && ed.design.topEdge[1].t.y === 0.2, "tangent should survive a node drag");
 });
 check("hyperbolic editor shows a fixed square tile (edge shape ignored)", function () {
   const d = design({ style: "hyperbolic" });

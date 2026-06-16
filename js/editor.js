@@ -170,6 +170,13 @@ Escher.Editor = (function () {
       return;
     }
     if (this.tool === "edges" && this.editEdges) {
+      var lev = this._hitLever(px);    // tangent lever (only on the selected/hovered node)
+      if (lev) {
+        this.active = { type: "lever", edge: lev.edge, i: lev.i, off: lev.off };
+        this.canvas.setPointerCapture(e.pointerId);
+        this.draw();
+        return;
+      }
       var h = this._hitHandle(px);
       if (h) {
         this.active = { type: "handle", h: h };
@@ -191,6 +198,7 @@ Escher.Editor = (function () {
     var px = this._evtPx(e);
     if (!this.active) {
       if (this.tool === "edges" && this.editEdges && !this.pendingNode) {
+        if (this.emphasis && this._hitLever(px)) return;   // keep node selected so its lever stays grabbable
         var h = this._hitHandle(px);
         var em = h ? { edge: h.edge, i: h.i } : null;
         if (emphChanged(this.emphasis, em)) { this.emphasis = em; this.draw(); }
@@ -198,11 +206,15 @@ Escher.Editor = (function () {
       return;
     }
     if (this.active.type === "handle") {
-      var hh = this.active.h, u = this.toUnit(px);
-      this.design[hh.edge][hh.i] = {
-        x: G.clamp(u.x - hh.off.x, -0.45, 1.45),
-        y: G.clamp(u.y - hh.off.y, -0.45, 1.45)
-      };
+      var hh = this.active.h, u = this.toUnit(px), node = this.design[hh.edge][hh.i];
+      node.x = G.clamp(u.x - hh.off.x, -0.45, 1.45);   // mutate in place to keep the node's tangent (.t)
+      node.y = G.clamp(u.y - hh.off.y, -0.45, 1.45);
+      this.onChange(); this.draw();
+    } else if (this.active.type === "lever") {
+      var a = this.active, src = this.design[a.edge][a.i], lu = this.toUnit(px);
+      var tx = lu.x - a.off.x - src.x, ty = lu.y - a.off.y - src.y;
+      var len = Math.hypot(tx, ty) || 1e-6, L = G.clamp(len, 0.02, 0.7);
+      src.t = { x: tx * L / len, y: ty * L / len };   // angle = gradient, length = curvature
       this.onChange(); this.draw();
     } else {
       var uu = this.toUnit(px);
@@ -259,6 +271,7 @@ Escher.Editor = (function () {
       this._drawSpline("leftEdge", MIRROR.leftEdge, leftEmph);
       if (emph && !armed) this._drawLinkConnector(emph);
       this._drawHandles();
+      if (emph && !armed) this._drawLever(emph);   // tangent lever, only on the active node
     }
 
     // corner dots
@@ -288,8 +301,8 @@ Escher.Editor = (function () {
 
   Editor.prototype._drawSpline = function (edge, off, emph) {
     var ctx = this.ctx;
-    var ctrl = this.design[edge].map(function (p) { return { x: p.x + off.x, y: p.y + off.y }; });
-    var pts = G.catmullRom(ctrl, 12), p0 = this.toPx(pts[0]);
+    var ctrl = this.design[edge].map(function (p) { return { x: p.x + off.x, y: p.y + off.y, t: p.t }; });
+    var pts = G.edgeCurve(ctrl, 14), p0 = this.toPx(pts[0]);
     ctx.beginPath();
     ctx.moveTo(p0.x, p0.y);
     for (var i = 1; i < pts.length; i++) { var p = this.toPx(pts[i]); ctx.lineTo(p.x, p.y); }
@@ -308,6 +321,40 @@ Escher.Editor = (function () {
     ctx.strokeStyle = "rgba(240,196,106,.55)"; ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.setLineDash([]);
+  };
+
+  // ---- per-node tangent "levers" (Bezier handles) ----
+  Editor.prototype._nodeTangent = function (edge, i) { return G.edgeTangent(this.design[edge], i); };
+  Editor.prototype._leverOut = function (edge, i, off) {
+    var src = this.design[edge][i], t = this._nodeTangent(edge, i);
+    return this.toPx({ x: src.x + off.x + t.x, y: src.y + off.y + t.y });
+  };
+  Editor.prototype._hitLever = function (px) {
+    if (!this.emphasis || !this.editEdges) return null;
+    var e = this.emphasis, offs = [{ x: 0, y: 0 }, MIRROR[e.edge]];
+    for (var k = 0; k < offs.length; k++) {
+      var p = this._leverOut(e.edge, e.i, offs[k]);
+      var dd = (p.x - px.x) * (p.x - px.x) + (p.y - px.y) * (p.y - px.y);
+      if (dd < 11 * 11) return { edge: e.edge, i: e.i, off: offs[k] };
+    }
+    return null;
+  };
+  Editor.prototype._drawLever = function (emph) {
+    var ctx = this.ctx, src = this.design[emph.edge][emph.i], t = this._nodeTangent(emph.edge, emph.i);
+    var offs = [{ x: 0, y: 0 }, MIRROR[emph.edge]];
+    for (var k = 0; k < offs.length; k++) {
+      var off = offs[k];
+      var inP = this.toPx({ x: src.x + off.x - t.x, y: src.y + off.y - t.y });
+      var outP = this.toPx({ x: src.x + off.x + t.x, y: src.y + off.y + t.y });
+      ctx.beginPath();                       // thin, faint tangent bar through the node
+      ctx.moveTo(inP.x, inP.y); ctx.lineTo(outP.x, outP.y);
+      ctx.strokeStyle = "rgba(240,224,186,.5)"; ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(outP.x, outP.y, 3.4, 0, 7);   // draggable end
+      ctx.fillStyle = "rgba(240,196,106,.9)"; ctx.fill();
+      ctx.beginPath(); ctx.arc(inP.x, inP.y, 2.2, 0, 7);     // mirrored end (display only)
+      ctx.fillStyle = "rgba(240,224,186,.45)"; ctx.fill();
+    }
   };
 
   Editor.prototype._drawHandles = function () {

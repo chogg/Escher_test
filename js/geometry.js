@@ -71,8 +71,46 @@ Escher.geom = (function () {
     return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
   }
 
+  // Tangent ("lever") offset at node i of an edge. If the node carries an
+  // explicit `t` (set by dragging its lever) use it; otherwise fall back to the
+  // uniform Catmull-Rom tangent (P[i+1]-P[i-1])/6, so untouched nodes keep the
+  // smooth default shape. The cubic-Bezier control points around node i are
+  // P[i] ± tangent.
+  function edgeTangent(points, i) {
+    var node = points[i];
+    if (node.t) return node.t;
+    var prev = points[i - 1] || node, next = points[i + 1] || node;
+    return { x: (next.x - prev.x) / 6, y: (next.y - prev.y) / 6 };
+  }
+
+  // Sample an edge (array of nodes, possibly with per-node `t` tangents) as a
+  // smooth cubic-Bezier polyline. With default tangents this equals Catmull-Rom.
+  function edgeCurve(points, samples) {
+    samples = samples || 16;
+    var n = points.length;
+    if (n < 2) return points.slice();
+    var out = [{ x: points[0].x, y: points[0].y }];
+    for (var i = 0; i < n - 1; i++) {
+      var P0 = points[i], P3 = points[i + 1];
+      var t0 = edgeTangent(points, i), t1 = edgeTangent(points, i + 1);
+      var c1x = P0.x + t0.x, c1y = P0.y + t0.y;
+      var c2x = P3.x - t1.x, c2y = P3.y - t1.y;
+      for (var s = 1; s <= samples; s++) {
+        var u = s / samples, v = 1 - u;
+        var b0 = v * v * v, b1 = 3 * v * v * u, b2 = 3 * v * u * u, b3 = u * u * u;
+        out.push({
+          x: b0 * P0.x + b1 * c1x + b2 * c2x + b3 * P3.x,
+          y: b0 * P0.y + b1 * c1y + b2 * c2y + b3 * P3.y
+        });
+      }
+    }
+    return out;
+  }
+
   return {
     catmullRom: catmullRom,
+    edgeTangent: edgeTangent,
+    edgeCurve: edgeCurve,
     circle3: circle3,
     clamp: clamp,
     lerp: lerp,

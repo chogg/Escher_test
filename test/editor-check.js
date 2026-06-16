@@ -39,7 +39,8 @@ function fillPoly(pts, c) {
 
 function circlePoly(cx, cy, r, n) { var p = []; for (var i = 0; i < n; i++) { var a = i / n * Math.PI * 2; p.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }); } return p; }
 const d = {
-  topEdge: [{ x: 0, y: 0 }, { x: 0.33, y: -0.16 }, { x: 0.66, y: 0.16 }, { x: 1, y: 0 }],
+  // node [1] carries an explicit tangent (set via its lever) to show curvature control
+  topEdge: [{ x: 0, y: 0 }, { x: 0.33, y: -0.16 }, { x: 0.66, y: 0.16, t: { x: 0.2, y: 0.17 } }, { x: 1, y: 0 }],
   leftEdge: [{ x: 0, y: 0 }, { x: -0.16, y: 0.33 }, { x: 0.16, y: 0.66 }, { x: 0, y: 1 }],
   strokes: [
     { color: "#1c140c", fill: false, points: [{ x: 0.30, y: 0.62 }, { x: 0.42, y: 0.70 }, { x: 0.58, y: 0.70 }, { x: 0.70, y: 0.60 }] },
@@ -62,21 +63,32 @@ stroke(boundary.concat([boundary[0]]), 1.2, [20, 16, 12]);
 // decorations
 for (const st of d.strokes) { const pts = st.points.map(M); if (st.fill) fillPoly(pts, rgb(st.color)); else stroke(pts, 2.4, rgb(st.color)); }
 // edge splines (top pair emphasised gold, left pair cyan)
-function spline(edge, off, c, r) { const ctrl = d[edge].map(p => ({ x: p.x + off.x, y: p.y + off.y })); stroke(E.geom.catmullRom(ctrl, 14).map(M), r, c); }
+function spline(edge, off, c, r) { const ctrl = d[edge].map(p => ({ x: p.x + off.x, y: p.y + off.y, t: p.t })); stroke(E.geom.edgeCurve(ctrl, 16).map(M), r, c); }
 const GOLD = [240, 196, 106], CYAN = [127, 176, 182];
 spline("topEdge", { x: 0, y: 0 }, GOLD, 2.2); spline("topEdge", { x: 0, y: 1 }, GOLD, 2.2);
 spline("leftEdge", { x: 0, y: 0 }, CYAN, 1.4); spline("leftEdge", { x: 1, y: 0 }, CYAN, 1.4);
 // connector for emphasised pair
-const src = d.topEdge[1]; stroke([M(src), M({ x: src.x, y: src.y + 1 })], 0.8, [240, 196, 106], true);
+const src = d.topEdge[2]; stroke([M(src), M({ x: src.x, y: src.y + 1 })], 0.8, [240, 196, 106], true);
 // handles
 [["topEdge", { x: 0, y: 0 }], ["topEdge", { x: 0, y: 1 }], ["leftEdge", { x: 0, y: 0 }], ["leftEdge", { x: 1, y: 0 }]].forEach(pair => {
   const edge = pair[0], off = pair[1], primary = off.x === 0 && off.y === 0;
   for (let i = 1; i < d[edge].length - 1; i++) {
-    const p = M({ x: d[edge][i].x + off.x, y: d[edge][i].y + off.y }), emph = edge === "topEdge" && i === 1;
+    const p = M({ x: d[edge][i].x + off.x, y: d[edge][i].y + off.y }), emph = edge === "topEdge" && i === 2;
     disc(p.x, p.y, emph ? 8.5 : 6.5, emph ? GOLD : (primary ? CYAN : [86, 133, 139]));
     ring(p.x, p.y, emph ? 8.5 : 6.5, 1, [17, 16, 14]);
   }
 });
+// tangent lever on the selected node top[2] (light + unobtrusive), shown on both linked copies
+(function () {
+  const node = d.topEdge[2], t = E.geom.edgeTangent(d.topEdge, 2);
+  [[0, 0], [0, 1]].forEach(([ox, oy]) => {
+    const inP = M({ x: node.x + ox - t.x, y: node.y + oy - t.y });
+    const outP = M({ x: node.x + ox + t.x, y: node.y + oy + t.y });
+    stroke([inP, outP], 0.8, [150, 140, 122]);   // faint tangent bar
+    disc(outP.x, outP.y, 3.4, [232, 188, 104]);   // draggable end
+    disc(inP.x, inP.y, 2.2, [150, 140, 122]);     // mirrored end
+  });
+})();
 
 const dir = path.join(path.resolve(__dirname, ".."), "test", "previews");
 fs.mkdirSync(dir, { recursive: true });
