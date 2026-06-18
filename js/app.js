@@ -43,12 +43,19 @@
   // first impression is an interlocking figure rather than blank polygons.
   function freshIso(type) {
     var iso = E.isohedral.defaultIso(type);
-    if (iso.edges[0] && iso.edges[0].ctrl.length >= 2) iso.edges[0].ctrl = [{ x: 0.3, y: 0.26 }, { x: 0.7, y: 0.14 }];
-    else if (iso.edges[0] && iso.edges[0].ctrl.length === 1) iso.edges[0].ctrl = [{ x: 0.3, y: 0.24 }];
-    if (iso.edges[1] && iso.edges[1].ctrl.length >= 2) iso.edges[1].ctrl = [{ x: 0.3, y: -0.2 }, { x: 0.7, y: -0.1 }];
+    if (iso.edges[0] && iso.edges[0].ctrl.length >= 2) iso.edges[0].ctrl = [{ x: 0.32, y: 0.15 }, { x: 0.68, y: 0.09 }];
+    else if (iso.edges[0] && iso.edges[0].ctrl.length === 1) iso.edges[0].ctrl = [{ x: 0.3, y: 0.16 }];
+    if (iso.edges[1] && iso.edges[1].ctrl.length >= 2) iso.edges[1].ctrl = [{ x: 0.32, y: -0.12 }, { x: 0.68, y: -0.06 }];
+    // A small "eye" motif placed at the prototile's centroid and scaled to it —
+    // Tactile tiles live in per-type coordinate frames, so a fixed [0,1] guess
+    // would land outside the tile. Derive the centre from the actual corners.
+    var cs = E.isohedral.corners(iso), cx = 0, cy = 0, mnx = 1e9, mny = 1e9, mxx = -1e9, mxy = -1e9;
+    cs.forEach(function (p) { cx += p.x; cy += p.y; mnx = Math.min(mnx, p.x); mxx = Math.max(mxx, p.x); mny = Math.min(mny, p.y); mxy = Math.max(mxy, p.y); });
+    cx /= cs.length; cy /= cs.length;
+    var r = Math.min(mxx - mnx, mxy - mny) * 0.13;
     iso.strokes = [
-      { color: "#1c140c", width: 5, fill: true, points: circlePoly(0.46, 0.42, 0.05, 14) },
-      { color: "#f3ead6", width: 4, fill: true, points: circlePoly(0.47, 0.43, 0.02, 10) }
+      { color: "#1c140c", width: 5, fill: true, points: circlePoly(cx, cy, r, 14) },
+      { color: "#f3ead6", width: 4, fill: true, points: circlePoly(cx + r * 0.18, cy - r * 0.12, r * 0.42, 10) }
     ];
     return iso;
   }

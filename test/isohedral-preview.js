@@ -36,6 +36,13 @@ function render(type, file, opts) {
   if (opts.edges) opts.edges(iso);
   iso.strokes = opts.strokes || [];
   const t = ISO.makeTiling(iso), proto = ISO.outline(iso, 14);
+  if (opts.eye) {   // mirrors app.js freshIso(): centroid-anchored eye, scaled to the tile
+    const cs = ISO.corners(iso); let cx = 0, cy = 0, mnx = 1e9, mny = 1e9, mxx = -1e9, mxy = -1e9;
+    cs.forEach(p => { cx += p.x; cy += p.y; mnx = Math.min(mnx, p.x); mxx = Math.max(mxx, p.x); mny = Math.min(mny, p.y); mxy = Math.max(mxy, p.y); });
+    cx /= cs.length; cy /= cs.length; const r = Math.min(mxx - mnx, mxy - mny) * 0.13;
+    const circ = (ex, ey, rr, n) => { const a = []; for (let i = 0; i < n; i++) { const u = i / n * Math.PI * 2; a.push({ x: ex + Math.cos(u) * rr, y: ey + Math.sin(u) * rr }); } return a; };
+    iso.strokes = [{ fill: true, color: "#1c140c", points: circ(cx, cy, r, 16) }, { fill: true, color: "#f3ead6", points: circ(cx + r * 0.18, cy - r * 0.12, r * 0.42, 10) }];
+  }
   if (opts.fish) {
     let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
     proto.forEach(p => { bx0 = Math.min(bx0, p.x); by0 = Math.min(by0, p.y); bx1 = Math.max(bx1, p.x); by1 = Math.max(by1, p.y); });
@@ -78,6 +85,8 @@ render(43, path.join(dir, "iso-birdfish.png"), { density: 5, edges: function (is
 render(4, path.join(dir, "iso-hex.png"), { density: 4.5, edges: function (iso) { if (iso.edges[1]) iso.edges[1].ctrl = [{ x: 0.3, y: 0.22 }, { x: 0.7, y: 0.18 }]; } });
 // A simple offset-brick quad with straight edges (sanity layout)
 render(36, path.join(dir, "iso-glide36.png"), { density: 5, edges: function (iso) { iso.edges[0].ctrl = [{ x: 0.25, y: 0.28 }]; } });
+// IH38 with the centroid-anchored eye (was the "scattered dots" bug)
+render(38, path.join(dir, "iso-ih38.png"), { density: 4, eye: true, edges: function (iso) { if (iso.edges[0] && iso.edges[0].ctrl.length >= 2) iso.edges[0].ctrl = [{ x: 0.32, y: 0.15 }, { x: 0.68, y: 0.09 }]; } });
 // HERO: a glide quad bent into a fish, with an asymmetric eye+mouth motif so the
 // alternating-row flip (birds/fish facing opposite ways each row) is obvious.
 render(43, path.join(dir, "iso-hero.png"), { density: 4.4, fish: true, colorA: "#d8743b", colorB: "#3f7d86", edges: function (iso) { iso.edges[0].ctrl = [{ x: 0.28, y: 0.32 }, { x: 0.74, y: 0.16 }]; if (iso.edges[1]) iso.edges[1].ctrl = [{ x: 0.26, y: -0.24 }, { x: 0.66, y: -0.1 }]; } });

@@ -263,21 +263,35 @@ Escher.Editor = (function () {
 
   Editor.prototype._up = function () {
     if (this.active && this.active.type === "stroke") this.onChange();
+    var refit = this.mode === "iso" && this.active && this.active.type === "isoHandle";
     this.active = null;
+    if (refit) this._view = null;   // edge has settled — refit so a big bend can't stay clipped
     this.draw();
   };
 
   // ===================== ISOHEDRAL (Tactile) EDIT MODE =====================
-  // tile-coord <-> canvas transform, fit from the (deform-independent) corners
+  // tile-coord <-> canvas transform. Fit EVERYTHING that gets drawn — the tile
+  // corners, the bent outline, AND the edge control-point handles (which sit off
+  // the edge) — so nothing clips for long-edged types. Cached and invalidated on
+  // edit so the tile doesn't rescale mid-drag.
   Editor.prototype._isoComputeView = function () {
-    var ISO = Escher.isohedral, cs = ISO.corners(this.design.iso);
+    if (this._view) return this._view;
+    var ISO = Escher.isohedral, iso = this.design.iso;
+    var pts = ISO.corners(iso).concat(ISO.outline(iso, 12));
+    var nz = ISO.normalizeEdges(iso), t = nz.tiling, letters = nz.letters, seen = {}, it = t.shape();
+    for (var s = it.next(); !s.done; s = it.next()) {
+      var si = s.value; if (seen[si.id]) continue; seen[si.id] = 1;
+      var cp = ISO.controlPair(iso.edges[si.id].ctrl, letters[si.id]);
+      if (cp) { pts.push(ISO.apply(si.T, cp[0])); if (letters[si.id] === "J") pts.push(ISO.apply(si.T, cp[1])); }
+    }
     var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
-    for (var i = 0; i < cs.length; i++) {
-      if (cs[i].x < minx) minx = cs[i].x; if (cs[i].x > maxx) maxx = cs[i].x;
-      if (cs[i].y < miny) miny = cs[i].y; if (cs[i].y > maxy) maxy = cs[i].y;
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      if (p.x < minx) minx = p.x; if (p.x > maxx) maxx = p.x;
+      if (p.y < miny) miny = p.y; if (p.y > maxy) maxy = p.y;
     }
     var bw = (maxx - minx) || 1, bh = (maxy - miny) || 1, avail = this.canvas.width - this.pad * 2;
-    var scale = Math.min(avail / bw, avail / bh) * 0.74;   // margin so handles aren't clipped
+    var scale = Math.min(avail / bw, avail / bh);   // pad already leaves a hard margin for handle discs
     this._view = { scale: scale, ox: this.canvas.width / 2 - scale * (minx + maxx) / 2,
                    oy: this.canvas.height / 2 - scale * (miny + maxy) / 2 };
     return this._view;

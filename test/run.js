@@ -248,6 +248,18 @@ check("iso edge symmetry: S=rotation, U=mirror, I=straight", function () {
   assert(Math.abs(u[1].x - 0.7) < 1e-9 && Math.abs(u[1].y - 0.2) < 1e-9, "U partner");
   assert(E.isohedral.controlPair([], "I") === null, "I straight");
 });
+check("iso editor view fits tile + handles inside the canvas (no clipping)", function () {
+  [38, 43, 4, 21, 88, 30, 77].forEach(function (tp) {
+    const d = design({ style: "isohedral" }); d.iso = E.isohedral.defaultIso(tp);
+    if (d.iso.edges[0] && d.iso.edges[0].ctrl.length) d.iso.edges[0].ctrl[0] = { x: 0.3, y: 0.32 }; // aggressive bend
+    const cv = makeCanvas(460, 460), ed = new E.Editor(cv, d, function () {});
+    ed.setMode("iso"); ed._isoComputeView();
+    const pts = E.isohedral.outline(d.iso, 12).map(p => ed._isoToCanvas(p));
+    ed._isoEdges().forEach(e => e.handles.forEach(h => pts.push(ed._isoToCanvas(h.tile))));
+    pts.forEach(p => assert(p.x >= -2 && p.x <= cv.width + 2 && p.y >= -2 && p.y <= cv.height + 2,
+      "IH" + tp + " draws off-canvas at (" + p.x.toFixed(0) + "," + p.y.toFixed(0) + ") — would clip"));
+  });
+});
 
 console.log("\n== sphere ==");
 [1, 2, 3].forEach(function (n) {
