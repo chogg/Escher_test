@@ -6,6 +6,7 @@ A dependency-free, single-page web app for designing Escher-style art. You desig
 | Style | What it does | Inspiration |
 |-------|--------------|-------------|
 | **Regular Tilings** | Deform a square tile's edges (opposite edges mirror, so tiles interlock) and tessellate the plane by translation (wallpaper group *p1*). | *Reptiles*, *Day and Night* |
+| **Escher Tessellations** | Choose from all **81 isohedral tiling types** (via the vendored [TactileJS](https://github.com/isohedral/tactile-js)) — rotations and glide reflections included, so figures turn and flip like Escher's interlocking birds & fish. Drag each edge's control points and the motif repeats (and flips) across the tiling. | *Bird/Fish*, *Pegasus*, *Lizards* |
 | **Reflecting Spheres** | Drops glossy mirror sphere(s) into your tiled world; each pixel reflects the surrounding pattern (orthographic mirror-ball reflection + Blinn specular). | *Hand with a Reflecting Sphere*, *Three Spheres II* |
 | **Hyperbolic Planes** | Maps the motif onto a regular **{p, q}** tiling of the Poincaré disk; tiles shrink toward an infinite horizon. | the *Circle Limit* series |
 
@@ -37,6 +38,8 @@ index.html            # 3-step UI shell
 css/styles.css        # styling
 js/geometry.js        # shared math (splines, circle-through-3-points, colour mixing)
 js/euclidean.js       # interlocking p1 tessellation (also the sphere's environment)
+js/vendor/tactile.js  # vendored TactileJS (BSD-3) — all 81 isohedral tiling types
+js/isohedral.js       # "Escher Tessellations": Tactile-backed isohedral engine
 js/sphere.js          # per-pixel reflecting mirror-ball(s)
 js/hyperbolic.js      # {p,q} Poincaré-disk tiling via a reflection group
 js/editor.js          # WYSIWYG fundamental-cell editor
@@ -59,6 +62,9 @@ node test/run.js          # 33 checks: geometry, all 3 renderers, editor, app bo
 node test/preview-svg.js  # faithful SVGs (euclidean / hyperbolic / editor) -> test/previews/
 node test/sphere-check.js # renders the mirror-ball reflection to PNG (equirect vs cube room)
 node test/editor-check.js # renders the editor's linked-spline UI to PNG
+node test/tactile-smoke.js    # every isohedral type tiles with finite geometry (23k assertions)
+node test/isohedral-check.js  # the Tactile-backed engine across all 81 types
+node test/isohedral-preview.js # rasterises sample tilings (incl. the bird/fish flip) to PNG
 ```
 
 The sphere reflection uses a **cube-room** environment lookup (a mirror ball in a
@@ -120,3 +126,20 @@ before you push (or just hard-refresh — Cmd/Ctrl+Shift+R — if you see old co
   to the unit circle). Reflecting in those edge-circles generates the whole tiling
   group; tiles are found by breadth-first search over that group, and the motif is
   carried through each group element so it curves and shrinks correctly.
+- **Isohedral tilings:** the *Escher Tessellations* style is built on **TactileJS**
+  (Craig S. Kaplan), which represents the 81 usable isohedral tiling types and
+  hands back a 3×3 transform per tile and per edge. Each edge is drawn as a cubic
+  with the intrinsic **J/U/S/I** symmetry the type forces (J = free, S = 180°
+  rotation, U = mirror, I = straight); the prototile is assembled from those edges
+  and stamped across the plane. 35 of the 81 types use glide/mirror symmetry — the
+  "alternating rows" that let birds and fish face opposite ways each row, which the
+  translation-only *p1* engine cannot express.
+
+### Vendored library / license
+
+`js/vendor/tactile.js` is [TactileJS](https://github.com/isohedral/tactile-js) by
+Craig S. Kaplan, redistributed under its **BSD-3-Clause** license (kept verbatim in
+`js/vendor/tactile.LICENSE`). The only change from upstream is the final few lines:
+its single ES-module `export` is adapted to a global `Tactile` object so the app can
+load it with a classic `<script>` tag (no build step) and the Node test harness can
+`require()` it.

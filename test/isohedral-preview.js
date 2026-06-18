@@ -29,11 +29,25 @@ function render(type, file, opts) {
       for (let k = 0; k + 1 < xs.length; k += 2) for (let x = Math.ceil(xs[k]); x <= xs[k + 1]; x++) set(x, y, c); }
   }
   function strokePoly(pts, c) { for (let k = 0; k < pts.length; k++) { const a = pts[k], b = pts[(k + 1) % pts.length]; const L = Math.hypot(b.x - a.x, b.y - a.y), n = Math.max(1, Math.ceil(L)); for (let s = 0; s <= n; s++) { const t = s / n; set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, c); } } }
+  function disc(cx, cy, r, c) { for (let y = Math.floor(cy - r); y <= cy + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) { const dx = x - cx, dy = y - cy; if (dx * dx + dy * dy <= r * r) set(x, y, c); } }
+  function discLine(pts, r, c) { for (let k = 0; k < pts.length - 1; k++) { const a = pts[k], b = pts[k + 1], L = Math.hypot(b.x - a.x, b.y - a.y), n = Math.max(1, Math.ceil(L / 1.2)); for (let s = 0; s <= n; s++) { const t = s / n; disc(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, r, c); } } }
 
   const iso = ISO.defaultIso(type);
   if (opts.edges) opts.edges(iso);
   iso.strokes = opts.strokes || [];
   const t = ISO.makeTiling(iso), proto = ISO.outline(iso, 14);
+  if (opts.fish) {
+    let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
+    proto.forEach(p => { bx0 = Math.min(bx0, p.x); by0 = Math.min(by0, p.y); bx1 = Math.max(bx1, p.x); by1 = Math.max(by1, p.y); });
+    const bw = bx1 - bx0, bh = by1 - by0, mn = Math.min(bw, bh);
+    const circ = (ex, ey, rr, n) => { const a = []; for (let i = 0; i < n; i++) { const u = i / n * Math.PI * 2; a.push({ x: ex + Math.cos(u) * rr, y: ey + Math.sin(u) * rr }); } return a; };
+    const ex = bx0 + 0.68 * bw, ey = by0 + 0.36 * bh;       // eye toward the +x end -> asymmetric
+    iso.strokes = [
+      { fill: true, color: "#1c140c", points: circ(ex, ey, 0.1 * mn, 16) },
+      { fill: true, color: "#f3ead6", points: circ(ex + 0.02 * bw, ey - 0.01 * bh, 0.04 * mn, 10) },
+      { fill: false, width: 6, color: "#1c140c", points: [{ x: bx0 + 0.5 * bw, y: by0 + 0.62 * bh }, { x: bx0 + 0.66 * bw, y: by0 + 0.7 * bh }, { x: bx0 + 0.82 * bw, y: by0 + 0.6 * bh }] }
+    ];
+  }
   const pal = [E.geom.hexToRgb(opts.colorA || "#d8743b"), E.geom.hexToRgb(opts.colorB || "#2f6f7a"), E.geom.hexToRgb("#b95f3a")].map(o => [o.r, o.g, o.b]);
   const density = opts.density || 5, cx = W / 2, cy = H / 2, scale = W / density;
   const bx0 = (0 - cx) / scale, bx1 = (W - cx) / scale, by0 = (0 - cy) / scale, by1 = (H - cy) / scale, pad = 2.5;
@@ -44,6 +58,12 @@ function render(type, file, opts) {
     const scr = proto.map(p => { const w = ISO.apply(M, p); return { x: cx + scale * w.x, y: cy + scale * w.y }; });
     fillPoly(scr, pal[t.getColour(inst.value.t1, inst.value.t2, inst.value.aspect)]);
     strokePoly(scr, [40, 32, 24]);
+    // motif, transformed through this tile (shows it repeating AND flipping)
+    (iso.strokes || []).forEach(function (st) {
+      const sp = st.points.map(p => { const w = ISO.apply(M, p); return { x: cx + scale * w.x, y: cy + scale * w.y }; });
+      const col = E.geom.hexToRgb(st.color); const c = [col.r, col.g, col.b];
+      if (st.fill) fillPoly(sp, c); else discLine(sp, Math.max(1, (st.width || 4) * scale / 100), c);
+    });
     tiles++;
   }
   fs.writeFileSync(file, encodePNG(W, H, buf));
@@ -58,3 +78,6 @@ render(43, path.join(dir, "iso-birdfish.png"), { density: 5, edges: function (is
 render(4, path.join(dir, "iso-hex.png"), { density: 4.5, edges: function (iso) { if (iso.edges[1]) iso.edges[1].ctrl = [{ x: 0.3, y: 0.22 }, { x: 0.7, y: 0.18 }]; } });
 // A simple offset-brick quad with straight edges (sanity layout)
 render(36, path.join(dir, "iso-glide36.png"), { density: 5, edges: function (iso) { iso.edges[0].ctrl = [{ x: 0.25, y: 0.28 }]; } });
+// HERO: a glide quad bent into a fish, with an asymmetric eye+mouth motif so the
+// alternating-row flip (birds/fish facing opposite ways each row) is obvious.
+render(43, path.join(dir, "iso-hero.png"), { density: 4.4, fish: true, colorA: "#d8743b", colorB: "#3f7d86", edges: function (iso) { iso.edges[0].ctrl = [{ x: 0.28, y: 0.32 }, { x: 0.74, y: 0.16 }]; if (iso.edges[1]) iso.edges[1].ctrl = [{ x: 0.26, y: -0.24 }, { x: 0.66, y: -0.1 }]; } });
