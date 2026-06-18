@@ -74,6 +74,7 @@ const src = d.topEdge[2]; stroke([M(src), M({ x: src.x, y: src.y + 1 })], 0.8, [
   const edge = pair[0], off = pair[1], primary = off.x === 0 && off.y === 0;
   for (let i = 1; i < d[edge].length - 1; i++) {
     const p = M({ x: d[edge][i].x + off.x, y: d[edge][i].y + off.y }), emph = edge === "topEdge" && i === 2;
+    if (emph) ring(p.x, p.y, 12, 1, [233, 196, 110]);   // selection ring (node stays selected)
     disc(p.x, p.y, emph ? 8.5 : 6.5, emph ? GOLD : (primary ? CYAN : [86, 133, 139]));
     ring(p.x, p.y, emph ? 8.5 : 6.5, 1, [17, 16, 14]);
   }

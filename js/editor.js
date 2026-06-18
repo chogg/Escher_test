@@ -23,20 +23,29 @@ Escher.Editor = (function () {
     this.pen = { color: "#1c140c", size: 4, fill: false };
     this.editEdges = true;
     this.active = null;
-    this.emphasis = null;       // {edge,i} highlighted handle/spline pair
+    this.selected = null;       // {edge,i} persistently selected node — its lever stays put
+    this.hover = null;          // {edge,i} transiently hovered node
     this.pendingNode = null;    // 'add' | 'remove' | null : awaiting a placement click
     this._bind();
     this.draw();
   }
 
-  Editor.prototype.setTool = function (t) { this.cancelPending(); this.tool = t; this.draw(); };
+  Editor.prototype.setTool = function (t) {
+    this.cancelPending();
+    this.tool = t;
+    this.hover = null;
+    if (t !== "edges") this.selected = null;
+    this.draw();
+  };
   Editor.prototype.setEditEdges = function (on) {
     this.editEdges = on;
     if (!on && this.tool === "edges") this.tool = "draw";
-    this.emphasis = null;
+    this.selected = null;
+    this.hover = null;
     this.cancelPending();
     this.draw();
   };
+  Editor.prototype._focus = function () { return this.selected || this.hover; };
 
   // ---- coordinate helpers ----
   Editor.prototype._evtPx = function (e) {
@@ -114,7 +123,7 @@ Escher.Editor = (function () {
       return false;
     }
     this.design[best.edge].splice(best.seg + 1, 0, { x: best.x - best.off.x, y: best.y - best.off.y });
-    this.emphasis = { edge: best.edge, i: best.seg + 1 };
+    this.selected = { edge: best.edge, i: best.seg + 1 };   // select the new node so its lever is ready
     this.onChange(); this.draw();
     return true;
   };
@@ -132,7 +141,7 @@ Escher.Editor = (function () {
     });
     if (!best) { if (this.onToast) this.onToast("No node to remove"); return false; }
     this.design[best.edge].splice(best.i, 1);
-    this.emphasis = null;
+    this.selected = null;
     this.onChange(); this.draw();
     return true;
   };
@@ -157,6 +166,9 @@ Escher.Editor = (function () {
     this.canvas.addEventListener("dblclick", function (e) {
       if (self.tool === "edges" && self.editEdges && !self.pendingNode) { e.preventDefault(); self._insertAt(self._evtPx(e), true); }
     });
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && (self.selected || self.pendingNode)) { self.selected = null; self.cancelPending(); self.draw(); }
+    });
   };
 
   Editor.prototype._down = function (e) {
@@ -179,9 +191,12 @@ Escher.Editor = (function () {
       }
       var h = this._hitHandle(px);
       if (h) {
+        this.selected = { edge: h.edge, i: h.i };   // persistent selection — lever stays after the mouse moves off
         this.active = { type: "handle", h: h };
-        this.emphasis = { edge: h.edge, i: h.i };
         this.canvas.setPointerCapture(e.pointerId);
+        this.draw();
+      } else {
+        this.selected = null;                        // click empty space to deselect
         this.draw();
       }
       return;
@@ -198,10 +213,11 @@ Escher.Editor = (function () {
     var px = this._evtPx(e);
     if (!this.active) {
       if (this.tool === "edges" && this.editEdges && !this.pendingNode) {
-        if (this.emphasis && this._hitLever(px)) return;   // keep node selected so its lever stays grabbable
+        var before = this._focus();
         var h = this._hitHandle(px);
-        var em = h ? { edge: h.edge, i: h.i } : null;
-        if (emphChanged(this.emphasis, em)) { this.emphasis = em; this.draw(); }
+        this.hover = h ? { edge: h.edge, i: h.i } : null;
+        // a selected node keeps focus regardless of hover, so its lever never vanishes
+        if (emphChanged(before, this._focus())) this.draw();
       }
       return;
     }
@@ -262,16 +278,16 @@ Escher.Editor = (function () {
     ctx.restore();
 
     if (this.editEdges) {
-      var emph = this.emphasis, armed = !!this.pendingNode;
-      var topEmph = armed || !!(emph && emph.edge === "topEdge");
-      var leftEmph = armed || !!(emph && emph.edge === "leftEdge");
+      var focus = this._focus(), armed = !!this.pendingNode;
+      var topEmph = armed || !!(focus && focus.edge === "topEdge");
+      var leftEmph = armed || !!(focus && focus.edge === "leftEdge");
       this._drawSpline("topEdge", { x: 0, y: 0 }, topEmph);
       this._drawSpline("topEdge", MIRROR.topEdge, topEmph);
       this._drawSpline("leftEdge", { x: 0, y: 0 }, leftEmph);
       this._drawSpline("leftEdge", MIRROR.leftEdge, leftEmph);
-      if (emph && !armed) this._drawLinkConnector(emph);
+      if (focus && !armed) this._drawLinkConnector(focus);
       this._drawHandles();
-      if (emph && !armed) this._drawLever(emph);   // tangent lever, only on the active node
+      if (focus && !armed) this._drawLever(focus);   // tangent lever, only on the focused node
     }
 
     // corner dots
@@ -330,8 +346,9 @@ Escher.Editor = (function () {
     return this.toPx({ x: src.x + off.x + t.x, y: src.y + off.y + t.y });
   };
   Editor.prototype._hitLever = function (px) {
-    if (!this.emphasis || !this.editEdges) return null;
-    var e = this.emphasis, offs = [{ x: 0, y: 0 }, MIRROR[e.edge]];
+    var e = this._focus();
+    if (!e || !this.editEdges) return null;
+    var offs = [{ x: 0, y: 0 }, MIRROR[e.edge]];
     for (var k = 0; k < offs.length; k++) {
       var p = this._leverOut(e.edge, e.i, offs[k]);
       var dd = (p.x - px.x) * (p.x - px.x) + (p.y - px.y) * (p.y - px.y);
@@ -358,14 +375,19 @@ Escher.Editor = (function () {
   };
 
   Editor.prototype._drawHandles = function () {
-    var ctx = this.ctx, emph = this.emphasis, self = this;
+    var ctx = this.ctx, focus = this._focus(), sel = this.selected, self = this;
     this._handles().forEach(function (h) {
       var p = self.toPx(self._handlePos(h));
-      var isEmph = emph && emph.edge === h.edge && emph.i === h.i;
+      var isFocus = focus && focus.edge === h.edge && focus.i === h.i;
+      var isSel = sel && sel.edge === h.edge && sel.i === h.i;
       var primary = h.off.x === 0 && h.off.y === 0;
+      if (isSel) {                                   // selection ring so it's clear the node stays active
+        ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, 7);
+        ctx.strokeStyle = "rgba(240,196,106,.7)"; ctx.lineWidth = 1.5; ctx.stroke();
+      }
       ctx.beginPath();
-      ctx.arc(p.x, p.y, isEmph ? 8.5 : 6.5, 0, 7);
-      ctx.fillStyle = isEmph ? "#f0c46a" : (primary ? "#7fb0b6" : "#56858b");
+      ctx.arc(p.x, p.y, isFocus ? 8.5 : 6.5, 0, 7);
+      ctx.fillStyle = isFocus ? "#f0c46a" : (primary ? "#7fb0b6" : "#56858b");
       ctx.fill();
       ctx.lineWidth = 2;
       ctx.strokeStyle = "#11100e";

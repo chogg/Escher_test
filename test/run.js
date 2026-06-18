@@ -316,7 +316,7 @@ check("double-click near an edge still inserts a node", function () {
 });
 check("node lever sets the tangent (gradient + curvature), length clamped", function () {
   const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
-  ed.emphasis = { edge: "topEdge", i: 1 };               // node is selected -> its lever exists
+  ed.selected = { edge: "topEdge", i: 1 };               // node is selected -> its lever exists
   const out = ed._leverOut("topEdge", 1, { x: 0, y: 0 });
   ed._down({ clientX: out.x, clientY: out.y, pointerId: 1, preventDefault() {} });
   assert(ed.active && ed.active.type === "lever", "should grab the lever, got " + (ed.active && ed.active.type));
@@ -328,8 +328,25 @@ check("node lever sets the tangent (gradient + curvature), length clamped", func
 });
 check("levers only exist for the selected / hovered node", function () {
   const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
-  ed.emphasis = null;
-  assert(ed._hitLever({ x: 100, y: 100 }) === null, "no lever should be hittable without a selected node");
+  ed.selected = null; ed.hover = null;
+  assert(ed._hitLever({ x: 100, y: 100 }) === null, "no lever should be hittable without a focused node");
+});
+check("selecting a node keeps its lever clickable after the mouse moves away", function () {
+  const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
+  const np = ed.toPx(ed.design.topEdge[1]);
+  ed._down({ clientX: np.x, clientY: np.y, pointerId: 1, preventDefault() {} });   // click selects
+  ed._up({});
+  assert(ed.selected && ed.selected.i === 1, "node should be selected after a click");
+  ed._move({ clientX: 4, clientY: 4, pointerId: 1 });                               // hover empty space
+  assert(ed.selected && ed.selected.i === 1, "selection must persist when hovering elsewhere");
+  const out = ed._leverOut("topEdge", 1, { x: 0, y: 0 });
+  assert(ed._hitLever({ x: out.x, y: out.y }) !== null, "lever must stay clickable for the selected node");
+});
+check("clicking empty space deselects the node", function () {
+  const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});
+  ed.selected = { edge: "topEdge", i: 1 };
+  ed._down({ clientX: ed.pad + 0.5 * ed.size, clientY: ed.pad + 0.5 * ed.size, pointerId: 1, preventDefault() {} });
+  assert(ed.selected === null, "clicking empty space should deselect");
 });
 check("dragging a node keeps its tangent lever", function () {
   const ed = new E.Editor(makeCanvas(460, 460), design(), function () {});

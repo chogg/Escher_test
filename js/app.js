@@ -240,7 +240,7 @@
 
   function baseEditorHint() {
     return design.style !== "hyperbolic"
-      ? "Drag the handles to shape the tile (opposite edges are linked). Hover or select a node to reveal its curve lever — angle sets the slope, length the curvature. 'Add node' then click an edge to add detail; Pen/Blob draw features."
+      ? "Drag the handles to shape the tile (opposite edges are linked). Click a node to select it — its curve lever stays put: drag the gold end (angle = slope, length = curvature). Click empty space or press Esc to deselect. 'Add node' then click an edge to add detail; Pen/Blob draw features."
       : "Draw your motif with the pen or blob — it maps into every {p,q} tile (the tile is a fixed quadrilateral here).";
   }
 
