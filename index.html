@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Tessellatorium · M.C. Escher-style Design Studio</title>
-<link rel="stylesheet" href="css/styles.css?v=d2766d73" />
+<link rel="stylesheet" href="css/styles.css?v=f19741a0" />
 </head>
 <body>
 <header class="topbar">
@@ -24,14 +24,20 @@
   <!-- STEP 1: STYLE SELECTION -->
   <section id="step-style" class="screen active">
     <h2 class="screen-title">Choose your world</h2>
-    <p class="screen-sub">Every style shares one motif editor &mdash; design a tile once and see it
-       reflected, repeated, and warped across three different geometries.</p>
+    <p class="screen-sub">One motif editor, several worlds &mdash; design a tile and see it interlocked,
+       reflected, and warped across regular, isohedral, spherical, and hyperbolic geometries.</p>
     <div class="style-grid">
       <button class="style-card" data-style="euclidean">
         <canvas class="style-thumb" width="220" height="160" data-thumb="euclidean"></canvas>
         <h3>Regular Tilings</h3>
-        <p>Interlocking tiles that tessellate the plane by translation &mdash; deform the edges and
-           they lock together like Escher's reptiles.</p>
+        <p>The simplest tessellation &mdash; deform a square and it repeats by translation. A
+           friendly place to start.</p>
+      </button>
+      <button class="style-card" data-style="isohedral">
+        <canvas class="style-thumb" width="220" height="160" data-thumb="isohedral"></canvas>
+        <h3>Escher Tessellations</h3>
+        <p>The full toolkit: choose from 81 isohedral tiling types &mdash; rotations and glide
+           reflections included &mdash; so figures turn and flip like Escher's birds &amp; fish.</p>
       </button>
       <button class="style-card" data-style="sphere">
         <canvas class="style-thumb" width="220" height="160" data-thumb="sphere"></canvas>
@@ -135,13 +141,15 @@
 </main>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<div class="buildstamp" id="build-version" title="Live build version">build 0be8517e &middot; 2026-06-18 03:10 UTC</div>
+<div class="buildstamp" id="build-version" title="Live build version">build 55a3f5ad &middot; 2026-06-18 04:20 UTC</div>
 
+<script src="js/vendor/tactile.js?v=b3ec4600"></script>
 <script src="js/geometry.js?v=84d4519f"></script>
 <script src="js/euclidean.js?v=0fca525c"></script>
+<script src="js/isohedral.js?v=e1ed69f4"></script>
 <script src="js/sphere.js?v=b0afcacb"></script>
 <script src="js/hyperbolic.js?v=d672754a"></script>
-<script src="js/editor.js?v=60d21be2"></script>
-<script src="js/app.js?v=ed3a05e6"></script>
+<script src="js/editor.js?v=57b6f66e"></script>
+<script src="js/app.js?v=2ded3d5d"></script>
 </body>
 </html>

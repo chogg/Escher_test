@@ -117,7 +117,8 @@ sandbox.globalThis = sandbox;
 
 // ---- load the real scripts ----
 const root = path.resolve(__dirname, "..");
-["js/geometry.js", "js/euclidean.js", "js/sphere.js", "js/hyperbolic.js", "js/editor.js"].forEach(function (f) {
+["js/vendor/tactile.js", "js/geometry.js", "js/euclidean.js", "js/isohedral.js",
+ "js/sphere.js", "js/hyperbolic.js", "js/editor.js"].forEach(function (f) {
   const code = fs.readFileSync(path.join(root, f), "utf8");
   vm.runInContext(code, sandbox, { filename: f });
 });
@@ -140,7 +141,8 @@ function design(over) {
 
 console.log("\n== module load ==");
 check("Escher namespace populated", function () {
-  ["geom", "euclidean", "sphere", "hyperbolic", "Editor"].forEach(function (k) { assert(E[k], "missing " + k); });
+  ["geom", "euclidean", "isohedral", "sphere", "hyperbolic", "Editor"].forEach(function (k) { assert(E[k], "missing " + k); });
+  assert(sandbox.window.Tactile && sandbox.window.Tactile.tilingTypes.length === 81, "Tactile global with 81 types");
 });
 
 console.log("\n== geometry ==");
@@ -186,6 +188,65 @@ check("euclidean render with no strokes", function () {
   const ctx = makeCanvas(600, 600).getContext();
   E.euclidean.render(ctx, 600, 600, design({ strokes: [] }));
   assert(ctx._calls.fill > 5);
+});
+
+console.log("\n== isohedral (Tactile) ==");
+check("catalogue: 81 types, 35 flagged alternating-rows", function () {
+  const cat = E.isohedral.catalogue();
+  assert(cat.length === 81, "expected 81 types, got " + cat.length);
+  assert(cat.filter(c => c.flip).length === 35, "expected 35 flip types");
+  cat.forEach(c => { assert(c.label && c.poly && Array.isArray(c.edgeShapes), "type " + c.type + " missing metadata"); });
+});
+[1, 4, 7, 21, 33, 36, 43, 77, 88].forEach(function (tp) {
+  check("isohedral render IH" + tp, function () {
+    const ctx = makeCanvas(900, 700).getContext();
+    const d = design({ style: "isohedral" });
+    d.iso = E.isohedral.defaultIso(tp);
+    d.iso.strokes = [{ color: "#1c140c", width: 5, fill: false, points: [{ x: 0.2, y: 0.2 }, { x: 0.6, y: 0.4 }] }];
+    if (d.iso.edges[0] && d.iso.edges[0].ctrl.length) d.iso.edges[0].ctrl[0] = { x: 0.3, y: 0.25 };
+    E.isohedral.render(ctx, 900, 700, d, { density: 4 });
+    assert(ctx._calls.fill > 6, "IH" + tp + " expected many tiles, got " + (ctx._calls.fill || 0));
+    assert(ctx._calls.clip > 0, "IH" + tp + " expected clipped motif");
+  });
+});
+check("isohedral lazily creates a default iso when missing", function () {
+  const ctx = makeCanvas(600, 480).getContext();
+  const d = design({ style: "isohedral", iso: null });
+  E.isohedral.render(ctx, 600, 480, d, {});
+  assert(d.iso && d.iso.type && d.iso.edges.length >= 1, "render should populate design.iso");
+});
+check("iso editor: dragging an edge handle reshapes the tile", function () {
+  const d = design({ style: "isohedral" }); d.iso = E.isohedral.defaultIso(43);
+  const ed = new E.Editor(makeCanvas(460, 460), d, function () {});
+  ed.setMode("iso");
+  assert(ed.mode === "iso", "editor should be in iso mode");
+  ed._isoComputeView();
+  const edges = ed._isoEdges();
+  assert(edges.length >= 1 && edges[0].handles.length >= 1, "expected editable edge handles");
+  const c = ed._isoToCanvas(edges[0].handles[0].tile);
+  ed._down({ clientX: c.x, clientY: c.y, pointerId: 1, preventDefault() {} });
+  assert(ed.active && ed.active.type === "isoHandle", "should grab an edge control point");
+  const before = JSON.stringify(d.iso.edges[0].ctrl);
+  ed._move({ clientX: c.x + 16, clientY: c.y - 24, pointerId: 1 });
+  ed._up({});
+  assert(JSON.stringify(d.iso.edges[0].ctrl) !== before, "edge control point should move");
+});
+check("iso editor: pen draws a motif stroke into iso.strokes", function () {
+  const d = design({ style: "isohedral" }); d.iso = E.isohedral.defaultIso(43); d.iso.strokes = [];
+  const ed = new E.Editor(makeCanvas(460, 460), d, function () {});
+  ed.setMode("iso"); ed.setTool("draw");
+  ed._down({ clientX: 210, clientY: 210, pointerId: 2, preventDefault() {} });
+  ed._move({ clientX: 240, clientY: 224, pointerId: 2 });
+  ed._move({ clientX: 270, clientY: 250, pointerId: 2 });
+  ed._up({});
+  assert(d.iso.strokes.length === 1 && d.iso.strokes[0].points.length >= 2, "motif stroke not recorded");
+});
+check("iso edge symmetry: S=rotation, U=mirror, I=straight", function () {
+  const s = E.isohedral.controlPair([{ x: 0.3, y: 0.2 }], "S");
+  assert(Math.abs(s[1].x - 0.7) < 1e-9 && Math.abs(s[1].y + 0.2) < 1e-9, "S partner");
+  const u = E.isohedral.controlPair([{ x: 0.3, y: 0.2 }], "U");
+  assert(Math.abs(u[1].x - 0.7) < 1e-9 && Math.abs(u[1].y - 0.2) < 1e-9, "U partner");
+  assert(E.isohedral.controlPair([], "I") === null, "I straight");
 });
 
 console.log("\n== sphere ==");
@@ -372,8 +433,8 @@ console.log("\n== app boot ==");
 check("app.js loads and DOMContentLoaded boots without throwing", function () {
   // give querySelectorAll enough structure for wire()/thumbnails
   const toolBtns = [mkBtn("edges"), mkBtn("draw"), mkBtn("blob")];
-  const styleCards = [mkCard("euclidean"), mkCard("sphere"), mkCard("hyperbolic")];
-  const thumbs = [mkThumb("euclidean"), mkThumb("sphere"), mkThumb("hyperbolic")];
+  const styleCards = [mkCard("euclidean"), mkCard("isohedral"), mkCard("sphere"), mkCard("hyperbolic")];
+  const thumbs = [mkThumb("euclidean"), mkThumb("isohedral"), mkThumb("sphere"), mkThumb("hyperbolic")];
   const stepLis = [mkStep("style"), mkStep("design"), mkStep("render")];
   documentMock.querySelectorAll = function (sel) {
     if (sel.indexOf("style-card") >= 0) return styleCards;
@@ -392,7 +453,7 @@ check("app.js loads and DOMContentLoaded boots without throwing", function () {
   sandbox._dom();   // boot
   assert(sandbox.window.__escher && sandbox.window.__escher.design, "app did not expose __escher");
   // simulate choosing each style end-to-end (enterDesign + a preview frame + render)
-  ["euclidean", "sphere", "hyperbolic"].forEach(function (s) {
+  ["euclidean", "isohedral", "sphere", "hyperbolic"].forEach(function (s) {
     sandbox.window.__escher.enterDesign(s);
     sandbox.window.__escher.doRender();
   });

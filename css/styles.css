@@ -59,8 +59,8 @@ main{flex:1;display:flex;flex-direction:column;min-height:0}
 
 /* ---------- Style selection ---------- */
 .style-grid{
-  display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:20px;
-  max-width:980px;margin:0 auto;width:100%;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(206px,1fr));gap:18px;
+  max-width:1080px;margin:0 auto;width:100%;
 }
 .style-card{
   text-align:left;cursor:pointer;color:var(--ink);

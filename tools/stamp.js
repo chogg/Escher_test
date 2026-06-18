@@ -17,7 +17,8 @@ let html = fs.readFileSync(indexPath, "utf8");
 
 const assets = [
   "css/styles.css",
-  "js/geometry.js", "js/euclidean.js", "js/sphere.js",
+  "js/vendor/tactile.js",
+  "js/geometry.js", "js/euclidean.js", "js/isohedral.js", "js/sphere.js",
   "js/hyperbolic.js", "js/editor.js", "js/app.js"
 ];
 

@@ -22,13 +22,27 @@ Escher.Editor = (function () {
     this.tool = "edges";
     this.pen = { color: "#1c140c", size: 4, fill: false };
     this.editEdges = true;
+    this.mode = "p1";           // 'p1' (square translate tile) | 'iso' (Tactile isohedral)
     this.active = null;
     this.selected = null;       // {edge,i} persistently selected node — its lever stays put
     this.hover = null;          // {edge,i} transiently hovered node
+    this.isoSel = null;         // selected isohedral edge id (its handles stay put)
+    this.isoHover = null;       // hovered isohedral edge id
+    this._view = null;          // cached tile->canvas transform for iso mode
     this.pendingNode = null;    // 'add' | 'remove' | null : awaiting a placement click
     this._bind();
     this.draw();
   }
+
+  // Switch between the simple p1 editor and the Tactile isohedral editor.
+  Editor.prototype.setMode = function (mode) {
+    this.mode = mode;
+    this.editEdges = true;
+    this.selected = this.hover = this.isoSel = this.isoHover = this.active = null;
+    this.cancelPending();
+    if (mode === "iso") { this.tool = "edges"; this._view = null; }
+    this.draw();
+  };
 
   Editor.prototype.setTool = function (t) {
     this.cancelPending();
@@ -174,6 +188,7 @@ Escher.Editor = (function () {
   Editor.prototype._down = function (e) {
     e.preventDefault();
     var px = this._evtPx(e);
+    if (this.mode === "iso") return this._isoDown(px, e);
     // click-to-place node takes priority
     if (this.pendingNode && this.editEdges) {
       if (this.pendingNode === "add") this._insertAt(px, false);
@@ -211,6 +226,7 @@ Escher.Editor = (function () {
 
   Editor.prototype._move = function (e) {
     var px = this._evtPx(e);
+    if (this.mode === "iso") return this._isoMove(px, e);
     if (!this.active) {
       if (this.tool === "edges" && this.editEdges && !this.pendingNode) {
         var before = this._focus();
@@ -251,8 +267,148 @@ Escher.Editor = (function () {
     this.draw();
   };
 
+  // ===================== ISOHEDRAL (Tactile) EDIT MODE =====================
+  // tile-coord <-> canvas transform, fit from the (deform-independent) corners
+  Editor.prototype._isoComputeView = function () {
+    var ISO = Escher.isohedral, cs = ISO.corners(this.design.iso);
+    var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+    for (var i = 0; i < cs.length; i++) {
+      if (cs[i].x < minx) minx = cs[i].x; if (cs[i].x > maxx) maxx = cs[i].x;
+      if (cs[i].y < miny) miny = cs[i].y; if (cs[i].y > maxy) maxy = cs[i].y;
+    }
+    var bw = (maxx - minx) || 1, bh = (maxy - miny) || 1, avail = this.canvas.width - this.pad * 2;
+    var scale = Math.min(avail / bw, avail / bh) * 0.74;   // margin so handles aren't clipped
+    this._view = { scale: scale, ox: this.canvas.width / 2 - scale * (minx + maxx) / 2,
+                   oy: this.canvas.height / 2 - scale * (miny + maxy) / 2 };
+    return this._view;
+  };
+  Editor.prototype._isoToCanvas = function (p) { var v = this._view || this._isoComputeView(); return { x: v.ox + v.scale * p.x, y: v.oy + v.scale * p.y }; };
+  Editor.prototype._isoToTile = function (px) { var v = this._view || this._isoComputeView(); return { x: (px.x - v.ox) / v.scale, y: (px.y - v.oy) / v.scale }; };
+
+  // One representative placed instance per distinct edge shape (id) -> where its
+  // control point handles live, in tile coords.
+  Editor.prototype._isoEdges = function () {
+    var ISO = Escher.isohedral, iso = this.design.iso, nz = ISO.normalizeEdges(iso);
+    var t = nz.tiling, letters = nz.letters, seen = {}, list = [], it = t.shape();
+    for (var s = it.next(); !s.done; s = it.next()) {
+      var si = s.value;
+      if (seen[si.id]) continue;
+      seen[si.id] = 1;
+      var L = letters[si.id], ctrl = iso.edges[si.id].ctrl, cp = ISO.controlPair(ctrl, L);
+      var handles = [];
+      if (cp) {
+        handles.push({ k: 0, tile: ISO.apply(si.T, cp[0]) });               // first (free) control point
+        if (L === "J") handles.push({ k: 1, tile: ISO.apply(si.T, cp[1]) }); // J has a second free point
+      }
+      list.push({ id: si.id, letter: L, T: si.T, v0: ISO.apply(si.T, { x: 0, y: 0 }), v1: ISO.apply(si.T, { x: 1, y: 0 }), handles: handles });
+    }
+    return list;
+  };
+  Editor.prototype._isoHitHandle = function (px) {
+    var edges = this._isoEdges(), best = null, bd = 14 * 14;
+    for (var i = 0; i < edges.length; i++) {
+      for (var j = 0; j < edges[i].handles.length; j++) {
+        var c = this._isoToCanvas(edges[i].handles[j].tile);
+        var dd = (c.x - px.x) * (c.x - px.x) + (c.y - px.y) * (c.y - px.y);
+        if (dd < bd) { bd = dd; best = { id: edges[i].id, k: edges[i].handles[j].k, letter: edges[i].letter, T: edges[i].T }; }
+      }
+    }
+    return best;
+  };
+
+  Editor.prototype._isoDown = function (px, e) {
+    this._isoComputeView();
+    if (this.tool === "edges") {
+      var h = this._isoHitHandle(px);
+      if (h) {
+        this.isoSel = h.id;
+        this.active = { type: "isoHandle", id: h.id, k: h.k, letter: h.letter, T: h.T };
+        if (e && this.canvas.setPointerCapture) this.canvas.setPointerCapture(e.pointerId);
+      } else { this.isoSel = null; }
+      this.draw();
+      return;
+    }
+    // pen / blob: draw motif in tile coords
+    var u = this._isoToTile(px);
+    this.design.iso.strokes = this.design.iso.strokes || [];
+    this.active = { type: "stroke", stroke: { color: this.pen.color, width: this.pen.size, fill: this.tool === "blob", points: [u] } };
+    this.design.iso.strokes.push(this.active.stroke);
+    if (e && this.canvas.setPointerCapture) this.canvas.setPointerCapture(e.pointerId);
+    this.draw();
+  };
+
+  Editor.prototype._isoMove = function (px, e) {
+    if (!this.active) {
+      if (this.tool === "edges") {
+        var h = this._isoHitHandle(px), id = h ? h.id : null;
+        if (id !== this.isoHover) { this.isoHover = id; this.draw(); }
+      }
+      return;
+    }
+    if (this.active.type === "isoHandle") {
+      var ISO = Escher.isohedral, a = this.active;
+      var tile = this._isoToTile(px), canon = ISO.apply(ISO.invert(a.T), tile);     // back to (0,0)-(1,0) edge space
+      canon.x = G.clamp(canon.x, 0.04, 0.96); canon.y = G.clamp(canon.y, -0.6, 0.6);
+      var ed = this.design.iso.edges[a.id];
+      ed.ctrl = ed.ctrl && ed.ctrl.length ? ed.ctrl.slice() : [{ x: 0.34, y: 0 }, { x: 0.66, y: 0 }];
+      ed.ctrl[a.k] = canon;                                                          // partner derived at sample time for U/S
+      this.onChange(); this.draw();
+    } else if (this.active.type === "stroke") {
+      var uu = this._isoToTile(px), pts = this.active.stroke.points, last = pts[pts.length - 1];
+      if (Math.hypot(uu.x - last.x, uu.y - last.y) > 0.004) { pts.push(uu); this.onChange(); this.draw(); }
+    }
+  };
+
+  Editor.prototype._isoDraw = function () {
+    var ctx = this.ctx, d = this.design, W = this.canvas.width, H = this.canvas.height;
+    var ISO = Escher.isohedral, iso = d.iso;
+    this._isoComputeView();
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = "#11100e"; ctx.fillRect(0, 0, W, H);
+
+    var self = this;
+    function C(p) { return self._isoToCanvas(p); }
+
+    // tile fill + outline
+    var outline = ISO.outline(iso, 14), p0 = C(outline[0]);
+    ctx.beginPath(); ctx.moveTo(p0.x, p0.y);
+    for (var i = 1; i < outline.length; i++) { var p = C(outline[i]); ctx.lineTo(p.x, p.y); }
+    ctx.closePath();
+    ctx.fillStyle = d.colorA; ctx.fill();
+    ctx.strokeStyle = "rgba(20,16,12,.75)"; ctx.lineWidth = 1.5; ctx.stroke();
+
+    // motif clipped to tile
+    if (iso.strokes && iso.strokes.length) {
+      ctx.save();
+      ctx.beginPath(); ctx.moveTo(p0.x, p0.y);
+      for (var j = 1; j < outline.length; j++) { var pj = C(outline[j]); ctx.lineTo(pj.x, pj.y); }
+      ctx.closePath(); ctx.clip();
+      ISO.drawStrokes(ctx, iso.strokes, function (q) { return C(q); }, this._view.scale);
+      ctx.restore();
+    }
+
+    // edge control-point handles (Bezier-style)
+    if (this.tool === "edges") {
+      var edges = this._isoEdges();
+      for (var k = 0; k < edges.length; k++) {
+        var ed = edges[k], emph = (ed.id === this.isoSel) || (ed.id === this.isoHover);
+        for (var m = 0; m < ed.handles.length; m++) {
+          var anchor = (ed.handles[m].k === 0) ? ed.v0 : ed.v1;     // tie line to nearest vertex
+          var a = C(anchor), hc = C(ed.handles[m].tile);
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(hc.x, hc.y);
+          ctx.strokeStyle = emph ? "rgba(240,196,106,.6)" : "rgba(240,224,186,.32)"; ctx.lineWidth = 1; ctx.stroke();
+          if (ed.id === this.isoSel) { ctx.beginPath(); ctx.arc(hc.x, hc.y, 11, 0, 7); ctx.strokeStyle = "rgba(240,196,106,.7)"; ctx.lineWidth = 1.5; ctx.stroke(); }
+          ctx.beginPath(); ctx.arc(hc.x, hc.y, emph ? 6.5 : 5, 0, 7);
+          ctx.fillStyle = emph ? "#f0c46a" : "#7fb0b6"; ctx.fill();
+          ctx.lineWidth = 2; ctx.strokeStyle = "#11100e"; ctx.stroke();
+        }
+      }
+    }
+  };
+  // ===================== end isohedral mode =====================
+
   // ---- rendering the editor view ----
   Editor.prototype.draw = function () {
+    if (this.mode === "iso") return this._isoDraw();
     var ctx = this.ctx, d = this.design, W = this.canvas.width, H = this.canvas.height, s = this.size, pad = this.pad;
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = "#11100e";
