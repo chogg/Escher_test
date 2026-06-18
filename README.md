@@ -90,6 +90,22 @@ Settings → Pages → Source: **GitHub Actions**, then either merge this branch
 or run the included workflow manually (Actions tab → *Deploy to GitHub Pages* →
 *Run workflow* → pick this branch). See `.github/workflows/pages.yml`.
 
+### Cache-busting / "is the live site up to date?"
+
+GitHub Pages caches assets (~10 min) and takes a short while to propagate, so a
+fresh push may not show up immediately in the browser. To avoid stale JS/CSS,
+asset URLs are **content-fingerprinted** (`js/app.js?v=<hash>`) — a file is
+re-fetched exactly when it changes. A small footer shows the live **build
+version**, so you can confirm at a glance what's deployed (and hard-refresh if it
+lags). Run the stamper before deploying:
+
+```bash
+node tools/stamp.js   # updates the ?v= hashes + footer; commit the result
+```
+
+The Pages Actions workflow runs it automatically; for branch deploys, run it
+before you push (or just hard-refresh — Cmd/Ctrl+Shift+R — if you see old code).
+
 ## The math, briefly
 
 - **Interlocking tiles:** the tile's top and left edges are editable Catmull-Rom

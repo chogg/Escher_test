@@ -30,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: node tools/stamp.js          # content-fingerprint asset URLs + stamp build version
       - uses: actions/configure-pages@v5
         with:
           enablement: true

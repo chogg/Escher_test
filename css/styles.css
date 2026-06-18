@@ -151,6 +151,13 @@ input[type=color]{width:32px;height:24px;border:1px solid var(--line);border-rad
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* ---------- Build/version stamp ---------- */
+.buildstamp{
+  position:fixed;bottom:6px;right:9px;z-index:5;pointer-events:none;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;
+  color:var(--muted);opacity:.45;letter-spacing:.3px;
+}
+
 @media (max-width:980px){
   .design-layout{grid-template-columns:1fr}
   .design-canvas-wrap{grid-template-columns:1fr}
