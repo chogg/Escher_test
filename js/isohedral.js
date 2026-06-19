@@ -72,41 +72,47 @@ Escher.isohedral = (function () {
   }
 
   // ---- edge shapes: canonical path from (0,0) to (1,0) ----
-  // ctrl holds the FREE interior control point(s): 2 for J, 1 for U/S, 0 for I.
-  function defaultCtrl(letter) {
-    if (letter === "J") return [{ x: 0.34, y: 0 }, { x: 0.66, y: 0 }];
-    if (letter === "S") return [{ x: 0.28, y: 0 }];   // partner derived (180° about midpoint)
-    if (letter === "U") return [{ x: 0.28, y: 0 }];   // partner derived (mirror about x=0.5)
-    return [];                                          // I: straight
+  // An edge is { nodes: [...] } of FREE interior nodes on the canonical path
+  // (0,0)->(1,0). J nodes are unconstrained; for U/S the free nodes live in the
+  // first half (x<=0.5) and their partners are GENERATED (U = mirror across
+  // x=0.5, S = 180° rotation about the midpoint); I is always straight.
+  var MAX_EDGE_NODES = 6;
+  function defaultNodes(letter) {
+    if (letter === "J") return [{ x: 0.5, y: 0.16 }];
+    if (letter === "S") return [{ x: 0.3, y: 0.14 }];   // + generated 180° partner
+    if (letter === "U") return [{ x: 0.3, y: 0.14 }];   // + generated mirror partner
+    return [];                                            // I: straight
   }
-  // Resolve the two cubic control points, honouring the J/U/S/I symmetry.
-  function controlPair(ctrl, letter) {
-    if (letter === "I" || !ctrl || !ctrl.length) return null;
-    var c1 = ctrl[0];
-    if (letter === "J") return [c1, ctrl[1] || { x: 0.66, y: 0 }];
-    if (letter === "S") return [c1, { x: 1 - c1.x, y: -c1.y }];   // 180° rotation about (0.5,0)
-    if (letter === "U") return [c1, { x: 1 - c1.x, y: c1.y }];    // reflection across x=0.5
-    return [c1, ctrl[1] || { x: 0.66, y: 0 }];
+  // The symmetric partner of a free node (null if none / not applicable).
+  function partnerNode(p, letter) {
+    if (letter === "U") return { x: 1 - p.x, y: p.y };    // mirror across x=0.5
+    if (letter === "S") return { x: 1 - p.x, y: -p.y };   // 180° about (0.5,0)
+    return null;
   }
-  function sampleEdge(ctrl, letter, samples) {
-    samples = samples || 12;
-    var cp = controlPair(ctrl, letter);
-    if (!cp) return [{ x: 0, y: 0 }, { x: 1, y: 0 }];   // straight
-    var P0 = { x: 0, y: 0 }, P3 = { x: 1, y: 0 }, c1 = cp[0], c2 = cp[1], out = [P0];
-    for (var s = 1; s <= samples; s++) {
-      var u = s / samples, v = 1 - u;
-      var b0 = v * v * v, b1 = 3 * v * v * u, b2 = 3 * v * u * u, b3 = u * u * u;
-      out.push({ x: b0 * P0.x + b1 * c1.x + b2 * c2.x + b3 * P3.x,
-                 y: b0 * P0.y + b1 * c1.y + b2 * c2.y + b3 * P3.y });
+  // Full interior node list (free + generated partners), ordered along the edge.
+  function fullNodes(nodes, letter) {
+    if (letter === "I" || !nodes) return [];
+    if (letter === "J") return nodes.slice();
+    var full = nodes.slice();
+    for (var i = nodes.length - 1; i >= 0; i--) {
+      if (Math.abs(nodes[i].x - 0.5) < 1e-4) continue;     // centre node: self-symmetric
+      full.push(partnerNode(nodes[i], letter));
     }
-    return out;
+    return full;
+  }
+  // Sample an edge as a smooth polyline from (0,0) to (1,0), reusing the shared
+  // per-node cubic sampler (default tangents keep symmetric node sets symmetric).
+  function sampleEdge(edge, letter, samples) {
+    var nodes = (edge && edge.nodes) ? edge.nodes : [];
+    var pts = [{ x: 0, y: 0 }].concat(fullNodes(nodes, letter), [{ x: 1, y: 0 }]);
+    return G.edgeCurve(pts, samples || 12);
   }
 
   // ---- design <-> tiling ----
   function defaultIso(type) {
     var m = meta(type || 43);
     var tac = T();
-    var edges = m.edgeShapes.map(function (L) { return { ctrl: defaultCtrl(L) }; });
+    var edges = m.edgeShapes.map(function (L) { return { nodes: defaultNodes(L) }; });
     var t = new tac.IsohedralTiling(m.type);
     return { type: m.type, params: t.getParameters(), edges: edges, density: 5, colorC: null };
   }
@@ -125,7 +131,9 @@ Escher.isohedral = (function () {
   function normalizeEdges(iso) {
     var t = makeTiling(iso), letters = edgeLetters(t);
     if (!iso.edges || iso.edges.length !== letters.length) {
-      iso.edges = letters.map(function (L) { return { ctrl: defaultCtrl(L) }; });
+      iso.edges = letters.map(function (L) { return { nodes: defaultNodes(L) }; });
+    } else {
+      for (var k = 0; k < iso.edges.length; k++) if (!iso.edges[k].nodes) iso.edges[k].nodes = [];
     }
     iso.params = (iso.params && iso.params.length === t.numParameters()) ? iso.params : t.getParameters();
     return { tiling: t, letters: letters };
@@ -144,7 +152,7 @@ Escher.isohedral = (function () {
     var pts = [], first = true, it = t.shape();
     for (var s = it.next(); !s.done; s = it.next()) {
       var si = s.value, L = letters[si.id];
-      var ep = sampleEdge(iso.edges[si.id].ctrl, L, samples || 12);
+      var ep = sampleEdge(iso.edges[si.id], L, samples || 12);
       if (si.rev) ep = ep.slice().reverse();
       for (var i = first ? 0 : 1; i < ep.length; i++) pts.push(apply(si.T, ep[i]));
       first = false;
@@ -232,7 +240,8 @@ Escher.isohedral = (function () {
   return {
     catalogue: catalogue, meta: meta, defaultIso: defaultIso, makeTiling: makeTiling,
     normalizeEdges: normalizeEdges, edgeLetters: edgeLetters,
-    sampleEdge: sampleEdge, controlPair: controlPair, defaultCtrl: defaultCtrl,
+    sampleEdge: sampleEdge, defaultNodes: defaultNodes, partnerNode: partnerNode,
+    fullNodes: fullNodes, MAX_EDGE_NODES: MAX_EDGE_NODES,
     corners: corners, outline: outline, drawStrokes: drawStrokes,
     apply: apply, invert: invert, render: render
   };

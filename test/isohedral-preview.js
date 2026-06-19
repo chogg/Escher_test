@@ -80,13 +80,13 @@ function render(type, file, opts) {
 const dir = path.join(path.resolve(__dirname, ".."), "test", "previews");
 fs.mkdirSync(dir, { recursive: true });
 // A glide quadrilateral bent into a bird-ish profile -> alternating rows
-render(43, path.join(dir, "iso-birdfish.png"), { density: 5, edges: function (iso) { iso.edges[0].ctrl = [{ x: 0.3, y: 0.34 }, { x: 0.72, y: 0.18 }]; if (iso.edges[1]) iso.edges[1].ctrl = [{ x: 0.28, y: -0.26 }, { x: 0.64, y: -0.12 }]; } });
+render(43, path.join(dir, "iso-birdfish.png"), { density: 5, edges: function (iso) { iso.edges[0].nodes = [{ x: 0.5, y: 0.34 }]; if (iso.edges[1]) iso.edges[1].nodes = [{ x: 0.5, y: -0.22 }]; } });
 // The classic Escher hexagon
-render(4, path.join(dir, "iso-hex.png"), { density: 4.5, edges: function (iso) { if (iso.edges[1]) iso.edges[1].ctrl = [{ x: 0.3, y: 0.22 }, { x: 0.7, y: 0.18 }]; } });
+render(4, path.join(dir, "iso-hex.png"), { density: 4.5, edges: function (iso) { if (iso.edges[1]) iso.edges[1].nodes = [{ x: 0.5, y: 0.2 }]; } });
 // A simple offset-brick quad with straight edges (sanity layout)
-render(36, path.join(dir, "iso-glide36.png"), { density: 5, edges: function (iso) { iso.edges[0].ctrl = [{ x: 0.25, y: 0.28 }]; } });
+render(36, path.join(dir, "iso-glide36.png"), { density: 5, edges: function (iso) { iso.edges[0].nodes = [{ x: 0.45, y: 0.28 }]; } });
 // IH38 with the centroid-anchored eye (was the "scattered dots" bug)
-render(38, path.join(dir, "iso-ih38.png"), { density: 4, eye: true, edges: function (iso) { if (iso.edges[0] && iso.edges[0].ctrl.length >= 2) iso.edges[0].ctrl = [{ x: 0.32, y: 0.15 }, { x: 0.68, y: 0.09 }]; } });
+render(38, path.join(dir, "iso-ih38.png"), { density: 4, eye: true, edges: function (iso) { if (iso.edges[0] && iso.edges[0].nodes.length) iso.edges[0].nodes = [{ x: 0.5, y: 0.16 }]; } });
 // HERO: a glide quad bent into a fish, with an asymmetric eye+mouth motif so the
 // alternating-row flip (birds/fish facing opposite ways each row) is obvious.
-render(43, path.join(dir, "iso-hero.png"), { density: 4.4, fish: true, colorA: "#d8743b", colorB: "#3f7d86", edges: function (iso) { iso.edges[0].ctrl = [{ x: 0.28, y: 0.32 }, { x: 0.74, y: 0.16 }]; if (iso.edges[1]) iso.edges[1].ctrl = [{ x: 0.26, y: -0.24 }, { x: 0.66, y: -0.1 }]; } });
+render(43, path.join(dir, "iso-hero.png"), { density: 4.4, fish: true, colorA: "#d8743b", colorB: "#3f7d86", edges: function (iso) { iso.edges[0].nodes = [{ x: 0.32, y: 0.3 }, { x: 0.66, y: -0.16 }]; if (iso.edges[1]) iso.edges[1].nodes = [{ x: 0.5, y: -0.2 }]; } });

@@ -57,7 +57,7 @@ let totalFills = 0;
 cat.forEach(function (c) {
   const d = baseDesign(c.type);
   // bend the first editable edge to exercise the deform path
-  if (d.iso.edges[0] && d.iso.edges[0].ctrl.length) d.iso.edges[0].ctrl[0] = { x: 0.3, y: 0.22 };
+  if (d.iso.edges[0] && d.iso.edges[0].nodes.length) d.iso.edges[0].nodes[0] = { x: 0.4, y: 0.22 };
   const cv = makeCanvas(640, 480), ctx = cv.getContext();
   try {
     ISO.render(ctx, 640, 480, d, { density: 4 });
@@ -75,13 +75,14 @@ cat.slice(0, 12).forEach(function (c) {
   ok(cor.length === c.verts && cor.every(p => Number.isFinite(p.x) && Number.isFinite(p.y)), "IH" + c.type + " corners = " + c.verts);
 });
 
-// Edge symmetry: S partner is 180° rotation; U partner is mirror.
+// Edge symmetry: S partner is 180° rotation; U partner is mirror; nodes generate them.
 (function () {
-  const sp = ISO.controlPair([{ x: 0.3, y: 0.2 }], "S");
-  ok(Math.abs(sp[1].x - 0.7) < 1e-9 && Math.abs(sp[1].y + 0.2) < 1e-9, "S edge partner = 180° rotation");
-  const up = ISO.controlPair([{ x: 0.3, y: 0.2 }], "U");
-  ok(Math.abs(up[1].x - 0.7) < 1e-9 && Math.abs(up[1].y - 0.2) < 1e-9, "U edge partner = mirror");
-  ok(ISO.controlPair([], "I") === null, "I edge is straight");
+  const sp = ISO.partnerNode({ x: 0.3, y: 0.2 }, "S");
+  ok(Math.abs(sp.x - 0.7) < 1e-9 && Math.abs(sp.y + 0.2) < 1e-9, "S edge partner = 180° rotation");
+  const up = ISO.partnerNode({ x: 0.3, y: 0.2 }, "U");
+  ok(Math.abs(up.x - 0.7) < 1e-9 && Math.abs(up.y - 0.2) < 1e-9, "U edge partner = mirror");
+  ok(ISO.fullNodes([{ x: 0.3, y: 0.2 }], "S").length === 2, "S fullNodes adds the partner half");
+  ok(ISO.fullNodes([{ x: 0.3, y: 0.2 }], "I").length === 0, "I edge stays straight");
 })();
 
 console.log((fail ? "✗" : "✓") + " isohedral engine: " + (checks - fail) + "/" + checks +

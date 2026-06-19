@@ -203,7 +203,7 @@ check("catalogue: 81 types, 35 flagged alternating-rows", function () {
     const d = design({ style: "isohedral" });
     d.iso = E.isohedral.defaultIso(tp);
     d.iso.strokes = [{ color: "#1c140c", width: 5, fill: false, points: [{ x: 0.2, y: 0.2 }, { x: 0.6, y: 0.4 }] }];
-    if (d.iso.edges[0] && d.iso.edges[0].ctrl.length) d.iso.edges[0].ctrl[0] = { x: 0.3, y: 0.25 };
+    if (d.iso.edges[0] && d.iso.edges[0].nodes.length) d.iso.edges[0].nodes[0] = { x: 0.4, y: 0.25 };
     E.isohedral.render(ctx, 900, 700, d, { density: 4 });
     assert(ctx._calls.fill > 6, "IH" + tp + " expected many tiles, got " + (ctx._calls.fill || 0));
     assert(ctx._calls.clip > 0, "IH" + tp + " expected clipped motif");
@@ -215,21 +215,21 @@ check("isohedral lazily creates a default iso when missing", function () {
   E.isohedral.render(ctx, 600, 480, d, {});
   assert(d.iso && d.iso.type && d.iso.edges.length >= 1, "render should populate design.iso");
 });
-check("iso editor: dragging an edge handle reshapes the tile", function () {
+check("iso editor: dragging an edge node reshapes the tile", function () {
   const d = design({ style: "isohedral" }); d.iso = E.isohedral.defaultIso(43);
   const ed = new E.Editor(makeCanvas(460, 460), d, function () {});
   ed.setMode("iso");
   assert(ed.mode === "iso", "editor should be in iso mode");
   ed._isoComputeView();
   const edges = ed._isoEdges();
-  assert(edges.length >= 1 && edges[0].handles.length >= 1, "expected editable edge handles");
-  const c = ed._isoToCanvas(edges[0].handles[0].tile);
+  assert(edges.length >= 1 && edges[0].free.length >= 1, "expected draggable edge nodes");
+  const c = ed._isoToCanvas(edges[0].free[0].tile);
   ed._down({ clientX: c.x, clientY: c.y, pointerId: 1, preventDefault() {} });
-  assert(ed.active && ed.active.type === "isoHandle", "should grab an edge control point");
-  const before = JSON.stringify(d.iso.edges[0].ctrl);
+  assert(ed.active && ed.active.type === "isoNode", "should grab an edge node");
+  const before = JSON.stringify(d.iso.edges[0].nodes);
   ed._move({ clientX: c.x + 16, clientY: c.y - 24, pointerId: 1 });
   ed._up({});
-  assert(JSON.stringify(d.iso.edges[0].ctrl) !== before, "edge control point should move");
+  assert(JSON.stringify(d.iso.edges[0].nodes) !== before, "edge node should move");
 });
 check("iso editor: pen draws a motif stroke into iso.strokes", function () {
   const d = design({ style: "isohedral" }); d.iso = E.isohedral.defaultIso(43); d.iso.strokes = [];
@@ -241,24 +241,53 @@ check("iso editor: pen draws a motif stroke into iso.strokes", function () {
   ed._up({});
   assert(d.iso.strokes.length === 1 && d.iso.strokes[0].points.length >= 2, "motif stroke not recorded");
 });
-check("iso edge symmetry: S=rotation, U=mirror, I=straight", function () {
-  const s = E.isohedral.controlPair([{ x: 0.3, y: 0.2 }], "S");
-  assert(Math.abs(s[1].x - 0.7) < 1e-9 && Math.abs(s[1].y + 0.2) < 1e-9, "S partner");
-  const u = E.isohedral.controlPair([{ x: 0.3, y: 0.2 }], "U");
-  assert(Math.abs(u[1].x - 0.7) < 1e-9 && Math.abs(u[1].y - 0.2) < 1e-9, "U partner");
-  assert(E.isohedral.controlPair([], "I") === null, "I straight");
+check("iso edge symmetry: S=rotation, U=mirror, partners generated", function () {
+  const s = E.isohedral.partnerNode({ x: 0.3, y: 0.2 }, "S");
+  assert(Math.abs(s.x - 0.7) < 1e-9 && Math.abs(s.y + 0.2) < 1e-9, "S partner = 180° rotation");
+  const u = E.isohedral.partnerNode({ x: 0.3, y: 0.2 }, "U");
+  assert(Math.abs(u.x - 0.7) < 1e-9 && Math.abs(u.y - 0.2) < 1e-9, "U partner = mirror");
+  assert(E.isohedral.partnerNode({ x: 0.3, y: 0.2 }, "J") === null, "J has no partner");
+  assert(E.isohedral.fullNodes([{ x: 0.3, y: 0.2 }], "S").length === 2, "S fullNodes adds the partner half");
+  assert(E.isohedral.fullNodes([{ x: 0.3, y: 0.2 }], "J").length === 1, "J fullNodes = free nodes only");
+  assert(E.isohedral.fullNodes([{ x: 0.3, y: 0.2 }], "I").length === 0, "I edge stays straight");
 });
-check("iso editor view fits tile + handles inside the canvas (no clipping)", function () {
+check("iso editor view fits tile + nodes inside the canvas (no clipping)", function () {
   [38, 43, 4, 21, 88, 30, 77].forEach(function (tp) {
     const d = design({ style: "isohedral" }); d.iso = E.isohedral.defaultIso(tp);
-    if (d.iso.edges[0] && d.iso.edges[0].ctrl.length) d.iso.edges[0].ctrl[0] = { x: 0.3, y: 0.32 }; // aggressive bend
+    if (d.iso.edges[0] && d.iso.edges[0].nodes.length) d.iso.edges[0].nodes[0] = { x: 0.4, y: 0.32 }; // aggressive bend
     const cv = makeCanvas(460, 460), ed = new E.Editor(cv, d, function () {});
     ed.setMode("iso"); ed._isoComputeView();
     const pts = E.isohedral.outline(d.iso, 12).map(p => ed._isoToCanvas(p));
-    ed._isoEdges().forEach(e => e.handles.forEach(h => pts.push(ed._isoToCanvas(h.tile))));
+    ed._isoEdges().forEach(e => { e.free.forEach(h => pts.push(ed._isoToCanvas(h.tile))); e.partners.forEach(h => pts.push(ed._isoToCanvas(h.tile))); });
     pts.forEach(p => assert(p.x >= -2 && p.x <= cv.width + 2 && p.y >= -2 && p.y <= cv.height + 2,
       "IH" + tp + " draws off-canvas at (" + p.x.toFixed(0) + "," + p.y.toFixed(0) + ") — would clip"));
   });
+});
+check("iso editor: add a node along an edge then remove it", function () {
+  const ISO = E.isohedral, d = design({ style: "isohedral" }); d.iso = ISO.defaultIso(43);
+  const ed = new E.Editor(makeCanvas(460, 460), d, function () {});
+  ed.setMode("iso"); ed._isoComputeView();
+  const n0 = ed._isoNodeCount(), e0 = ed._isoEdges()[0];
+  const samp = ISO.sampleEdge(d.iso.edges[e0.id], e0.letter, 16);
+  const mid = ed._isoToCanvas(ISO.apply(e0.T, samp[Math.floor(samp.length / 2)]));
+  ed.armAddNode();
+  assert(ed.pendingNode === "add", "armAddNode should arm placement");
+  ed._down({ clientX: mid.x, clientY: mid.y, pointerId: 1, preventDefault() {} });
+  assert(ed.pendingNode === null, "placing should disarm");
+  assert(ed._isoNodeCount() === n0 + 1, "a node should be added (" + ed._isoNodeCount() + " vs " + n0 + ")");
+  ed.armRemoveNode();
+  const last = ed._isoEdges()[0].free.slice(-1)[0], rc = ed._isoToCanvas(last.tile);
+  ed._down({ clientX: rc.x, clientY: rc.y, pointerId: 1, preventDefault() {} });
+  assert(ed._isoNodeCount() === n0, "node should be removed again (" + ed._isoNodeCount() + " vs " + n0 + ")");
+});
+check("iso editor: a node on an S edge generates one symmetric partner", function () {
+  const d = design({ style: "isohedral" }); d.iso = E.isohedral.defaultIso(8); // IH8 = all-S edges
+  const ed = new E.Editor(makeCanvas(460, 460), d, function () {});
+  ed.setMode("iso"); ed._isoComputeView();
+  const e0 = ed._isoEdges()[0];
+  assert(e0.letter === "S", "IH8 edge should be S, got " + e0.letter);
+  assert(e0.free.length >= 1 && e0.free.length === e0.partners.length,
+    "each free S node should have one partner (free=" + e0.free.length + ", partners=" + e0.partners.length + ")");
 });
 
 console.log("\n== sphere ==");
