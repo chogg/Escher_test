@@ -108,6 +108,7 @@ Escher.Editor = (function () {
 
   // ---- node placement (location chosen by the user's click) ----
   Editor.prototype.nodeCount = function () {
+    if (this.mode === "iso") return this._isoNodeCount();
     return (this.design.topEdge.length - 2) + (this.design.leftEdge.length - 2);
   };
   function segProj(p, a, b) {
@@ -178,7 +179,9 @@ Escher.Editor = (function () {
     this.canvas.addEventListener("pointermove", function (e) { self._move(e); });
     window.addEventListener("pointerup", function (e) { self._up(e); });
     this.canvas.addEventListener("dblclick", function (e) {
-      if (self.tool === "edges" && self.editEdges && !self.pendingNode) { e.preventDefault(); self._insertAt(self._evtPx(e), true); }
+      if (self.pendingNode) return;
+      if (self.mode === "iso") { if (self.tool === "edges") { e.preventDefault(); self._isoInsertAt(self._evtPx(e)); } return; }
+      if (self.tool === "edges" && self.editEdges) { e.preventDefault(); self._insertAt(self._evtPx(e), true); }
     });
     window.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && (self.selected || self.pendingNode)) { self.selected = null; self.cancelPending(); self.draw(); }
@@ -263,7 +266,7 @@ Escher.Editor = (function () {
 
   Editor.prototype._up = function () {
     if (this.active && this.active.type === "stroke") this.onChange();
-    var refit = this.mode === "iso" && this.active && this.active.type === "isoHandle";
+    var refit = this.mode === "iso" && this.active && this.active.type === "isoNode";
     this.active = null;
     if (refit) this._view = null;   // edge has settled — refit so a big bend can't stay clipped
     this.draw();
@@ -281,8 +284,8 @@ Escher.Editor = (function () {
     var nz = ISO.normalizeEdges(iso), t = nz.tiling, letters = nz.letters, seen = {}, it = t.shape();
     for (var s = it.next(); !s.done; s = it.next()) {
       var si = s.value; if (seen[si.id]) continue; seen[si.id] = 1;
-      var cp = ISO.controlPair(iso.edges[si.id].ctrl, letters[si.id]);
-      if (cp) { pts.push(ISO.apply(si.T, cp[0])); if (letters[si.id] === "J") pts.push(ISO.apply(si.T, cp[1])); }
+      var full = ISO.fullNodes(iso.edges[si.id].nodes || [], letters[si.id]);
+      for (var q = 0; q < full.length; q++) pts.push(ISO.apply(si.T, full[q]));
     }
     var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
     for (var i = 0; i < pts.length; i++) {
@@ -299,8 +302,8 @@ Escher.Editor = (function () {
   Editor.prototype._isoToCanvas = function (p) { var v = this._view || this._isoComputeView(); return { x: v.ox + v.scale * p.x, y: v.oy + v.scale * p.y }; };
   Editor.prototype._isoToTile = function (px) { var v = this._view || this._isoComputeView(); return { x: (px.x - v.ox) / v.scale, y: (px.y - v.oy) / v.scale }; };
 
-  // One representative placed instance per distinct edge shape (id) -> where its
-  // control point handles live, in tile coords.
+  // One representative placed instance per distinct edge shape (id), carrying its
+  // free (draggable) interior nodes and the generated symmetric partner nodes.
   Editor.prototype._isoEdges = function () {
     var ISO = Escher.isohedral, iso = this.design.iso, nz = ISO.normalizeEdges(iso);
     var t = nz.tiling, letters = nz.letters, seen = {}, list = [], it = t.shape();
@@ -308,35 +311,88 @@ Escher.Editor = (function () {
       var si = s.value;
       if (seen[si.id]) continue;
       seen[si.id] = 1;
-      var L = letters[si.id], ctrl = iso.edges[si.id].ctrl, cp = ISO.controlPair(ctrl, L);
-      var handles = [];
-      if (cp) {
-        handles.push({ k: 0, tile: ISO.apply(si.T, cp[0]) });               // first (free) control point
-        if (L === "J") handles.push({ k: 1, tile: ISO.apply(si.T, cp[1]) }); // J has a second free point
+      var L = letters[si.id], nodes = iso.edges[si.id].nodes || [], free = [], partners = [];
+      for (var i = 0; i < nodes.length; i++) free.push({ idx: i, tile: ISO.apply(si.T, nodes[i]) });
+      if (L === "U" || L === "S") {
+        for (var j = nodes.length - 1; j >= 0; j--) {
+          if (Math.abs(nodes[j].x - 0.5) < 1e-4) continue;
+          partners.push({ tile: ISO.apply(si.T, ISO.partnerNode(nodes[j], L)) });
+        }
       }
-      list.push({ id: si.id, letter: L, T: si.T, v0: ISO.apply(si.T, { x: 0, y: 0 }), v1: ISO.apply(si.T, { x: 1, y: 0 }), handles: handles });
+      list.push({ id: si.id, letter: L, T: si.T, free: free, partners: partners });
     }
     return list;
   };
-  Editor.prototype._isoHitHandle = function (px) {
+  Editor.prototype._isoHitNode = function (px) {
     var edges = this._isoEdges(), best = null, bd = 14 * 14;
     for (var i = 0; i < edges.length; i++) {
-      for (var j = 0; j < edges[i].handles.length; j++) {
-        var c = this._isoToCanvas(edges[i].handles[j].tile);
+      for (var j = 0; j < edges[i].free.length; j++) {
+        var c = this._isoToCanvas(edges[i].free[j].tile);
         var dd = (c.x - px.x) * (c.x - px.x) + (c.y - px.y) * (c.y - px.y);
-        if (dd < bd) { bd = dd; best = { id: edges[i].id, k: edges[i].handles[j].k, letter: edges[i].letter, T: edges[i].T }; }
+        if (dd < bd) { bd = dd; best = { id: edges[i].id, idx: edges[i].free[j].idx, letter: edges[i].letter, T: edges[i].T }; }
       }
     }
     return best;
   };
+  Editor.prototype._isoNodeCount = function () {
+    var iso = this.design.iso, n = 0;
+    if (iso && iso.edges) for (var i = 0; i < iso.edges.length; i++) n += (iso.edges[i].nodes ? iso.edges[i].nodes.length : 0);
+    return n;
+  };
+  // Add a free node where the user clicked (folded into the free half for U/S).
+  Editor.prototype._isoInsertAt = function (px) {
+    var ISO = Escher.isohedral, tile = this._isoToTile(px), edges = this._isoEdges(), best = null;
+    for (var i = 0; i < edges.length; i++) {
+      var L = edges[i].letter; if (L === "I") continue;            // straight edges take no nodes
+      var canon = ISO.apply(ISO.invert(edges[i].T), tile);
+      if (canon.x < 0.06 || canon.x > 0.94) continue;             // too near a vertex
+      var samp = ISO.sampleEdge(this.design.iso.edges[edges[i].id], L, 16), dmin = 1e9;
+      for (var s = 0; s < samp.length; s++) { var c = this._isoToCanvas(ISO.apply(edges[i].T, samp[s])); var dd = Math.hypot(c.x - px.x, c.y - px.y); if (dd < dmin) dmin = dd; }
+      if (!best || dmin < best.d) best = { d: dmin, id: edges[i].id, letter: L, canon: canon };
+    }
+    if (!best || best.d > 44) { if (this.onToast) this.onToast("Click nearer a tile edge to add a node"); return false; }
+    var ed = this.design.iso.edges[best.id], L2 = best.letter;
+    if ((ed.nodes ? ed.nodes.length : 0) >= ISO.MAX_EDGE_NODES) { if (this.onToast) this.onToast("That edge is at its node limit"); return false; }
+    var nx = best.canon.x, ny = best.canon.y, fx, fy;
+    if (L2 === "J") { fx = G.clamp(nx, 0.05, 0.95); fy = G.clamp(ny, -0.7, 0.7); }
+    else { if (nx <= 0.5) { fx = nx; fy = ny; } else { fx = 1 - nx; fy = (L2 === "S") ? -ny : ny; } fx = G.clamp(fx, 0.05, 0.5); fy = G.clamp(fy, -0.7, 0.7); }
+    ed.nodes = ed.nodes || [];
+    var at = ed.nodes.length;
+    for (var k = 0; k < ed.nodes.length; k++) if (fx < ed.nodes[k].x) { at = k; break; }
+    ed.nodes.splice(at, 0, { x: fx, y: fy });
+    this.isoSel = { id: best.id, idx: at };
+    this._view = null; this.onChange(); this.draw();
+    return true;
+  };
+  Editor.prototype._isoRemoveNearest = function (px) {
+    var h = this._isoHitNode(px);
+    if (!h) {
+      var edges = this._isoEdges(), best = null;
+      for (var i = 0; i < edges.length; i++) for (var j = 0; j < edges[i].free.length; j++) {
+        var c = this._isoToCanvas(edges[i].free[j].tile), dd = Math.hypot(c.x - px.x, c.y - px.y);
+        if (!best || dd < best.dd) best = { dd: dd, id: edges[i].id, idx: edges[i].free[j].idx };
+      }
+      h = best;
+    }
+    if (!h) { if (this.onToast) this.onToast("No node to remove"); return false; }
+    var ed = this.design.iso.edges[h.id];
+    if (!ed.nodes || !ed.nodes.length) { if (this.onToast) this.onToast("No node to remove"); return false; }
+    ed.nodes.splice(h.idx, 1); this.isoSel = null; this._view = null; this.onChange(); this.draw();
+    return true;
+  };
 
   Editor.prototype._isoDown = function (px, e) {
     this._isoComputeView();
+    if (this.pendingNode) {                          // click-to-place add/remove
+      if (this.pendingNode === "add") this._isoInsertAt(px); else this._isoRemoveNearest(px);
+      this._setPending(null);
+      return;
+    }
     if (this.tool === "edges") {
-      var h = this._isoHitHandle(px);
+      var h = this._isoHitNode(px);
       if (h) {
-        this.isoSel = h.id;
-        this.active = { type: "isoHandle", id: h.id, k: h.k, letter: h.letter, T: h.T };
+        this.isoSel = { id: h.id, idx: h.idx };
+        this.active = { type: "isoNode", id: h.id, idx: h.idx, letter: h.letter, T: h.T };
         if (e && this.canvas.setPointerCapture) this.canvas.setPointerCapture(e.pointerId);
       } else { this.isoSel = null; }
       this.draw();
@@ -354,18 +410,18 @@ Escher.Editor = (function () {
   Editor.prototype._isoMove = function (px, e) {
     if (!this.active) {
       if (this.tool === "edges") {
-        var h = this._isoHitHandle(px), id = h ? h.id : null;
-        if (id !== this.isoHover) { this.isoHover = id; this.draw(); }
+        var h = this._isoHitNode(px), hv = h ? { id: h.id, idx: h.idx } : null;
+        var changed = (!!hv !== !!this.isoHover) || (hv && this.isoHover && (hv.id !== this.isoHover.id || hv.idx !== this.isoHover.idx));
+        if (changed) { this.isoHover = hv; this.draw(); }
       }
       return;
     }
-    if (this.active.type === "isoHandle") {
+    if (this.active.type === "isoNode") {
       var ISO = Escher.isohedral, a = this.active;
       var tile = this._isoToTile(px), canon = ISO.apply(ISO.invert(a.T), tile);     // back to (0,0)-(1,0) edge space
-      canon.x = G.clamp(canon.x, 0.04, 0.96); canon.y = G.clamp(canon.y, -0.6, 0.6);
-      var ed = this.design.iso.edges[a.id];
-      ed.ctrl = ed.ctrl && ed.ctrl.length ? ed.ctrl.slice() : [{ x: 0.34, y: 0 }, { x: 0.66, y: 0 }];
-      ed.ctrl[a.k] = canon;                                                          // partner derived at sample time for U/S
+      var node = this.design.iso.edges[a.id].nodes[a.idx];
+      if (a.letter === "J") { node.x = G.clamp(canon.x, 0.05, 0.95); node.y = G.clamp(canon.y, -0.7, 0.7); }
+      else { node.x = G.clamp(canon.x, 0.04, 0.5); node.y = G.clamp(canon.y, -0.7, 0.7); }  // free node stays in the first half; its partner mirrors
       this.onChange(); this.draw();
     } else if (this.active.type === "stroke") {
       var uu = this._isoToTile(px), pts = this.active.stroke.points, last = pts[pts.length - 1];
@@ -400,19 +456,21 @@ Escher.Editor = (function () {
       ctx.restore();
     }
 
-    // edge control-point handles (Bezier-style)
+    // edge nodes: draggable free nodes + generated symmetric partners
     if (this.tool === "edges") {
-      var edges = this._isoEdges();
+      var edges = this._isoEdges(), sel = this.isoSel, hov = this.isoHover;
       for (var k = 0; k < edges.length; k++) {
-        var ed = edges[k], emph = (ed.id === this.isoSel) || (ed.id === this.isoHover);
-        for (var m = 0; m < ed.handles.length; m++) {
-          var anchor = (ed.handles[m].k === 0) ? ed.v0 : ed.v1;     // tie line to nearest vertex
-          var a = C(anchor), hc = C(ed.handles[m].tile);
-          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(hc.x, hc.y);
-          ctx.strokeStyle = emph ? "rgba(240,196,106,.6)" : "rgba(240,224,186,.32)"; ctx.lineWidth = 1; ctx.stroke();
-          if (ed.id === this.isoSel) { ctx.beginPath(); ctx.arc(hc.x, hc.y, 11, 0, 7); ctx.strokeStyle = "rgba(240,196,106,.7)"; ctx.lineWidth = 1.5; ctx.stroke(); }
-          ctx.beginPath(); ctx.arc(hc.x, hc.y, emph ? 6.5 : 5, 0, 7);
-          ctx.fillStyle = emph ? "#f0c46a" : "#7fb0b6"; ctx.fill();
+        var ed = edges[k], emph = (sel && sel.id === ed.id) || (hov && hov.id === ed.id);
+        for (var pI = 0; pI < ed.partners.length; pI++) {          // partners: display only (linked half)
+          var pc = C(ed.partners[pI].tile);
+          ctx.beginPath(); ctx.arc(pc.x, pc.y, 4.5, 0, 7);
+          ctx.fillStyle = "rgba(127,176,182,.45)"; ctx.fill();
+        }
+        for (var fI = 0; fI < ed.free.length; fI++) {              // free draggable nodes
+          var fc = C(ed.free[fI].tile), isSel = sel && sel.id === ed.id && sel.idx === ed.free[fI].idx;
+          if (isSel) { ctx.beginPath(); ctx.arc(fc.x, fc.y, 11, 0, 7); ctx.strokeStyle = "rgba(240,196,106,.7)"; ctx.lineWidth = 1.5; ctx.stroke(); }
+          ctx.beginPath(); ctx.arc(fc.x, fc.y, emph ? 6.5 : 5.5, 0, 7);
+          ctx.fillStyle = (isSel || emph) ? "#f0c46a" : "#7fb0b6"; ctx.fill();
           ctx.lineWidth = 2; ctx.strokeStyle = "#11100e"; ctx.stroke();
         }
       }

@@ -42,10 +42,7 @@
   // Seed a fresh isohedral design with a gentle curve + a little motif so the
   // first impression is an interlocking figure rather than blank polygons.
   function freshIso(type) {
-    var iso = E.isohedral.defaultIso(type);
-    if (iso.edges[0] && iso.edges[0].ctrl.length >= 2) iso.edges[0].ctrl = [{ x: 0.32, y: 0.15 }, { x: 0.68, y: 0.09 }];
-    else if (iso.edges[0] && iso.edges[0].ctrl.length === 1) iso.edges[0].ctrl = [{ x: 0.3, y: 0.16 }];
-    if (iso.edges[1] && iso.edges[1].ctrl.length >= 2) iso.edges[1].ctrl = [{ x: 0.32, y: -0.12 }, { x: 0.68, y: -0.06 }];
+    var iso = E.isohedral.defaultIso(type);   // edges already carry a gentle default curve
     // A small "eye" motif placed at the prototile's centroid and scaled to it —
     // Tactile tiles live in per-type coordinate frames, so a fixed [0,1] guess
     // would land outside the tile. Derive the centre from the actual corners.
@@ -302,7 +299,7 @@
       editor.setMode("iso");
       edgesBtn.style.display = "";
       selectTool("edges");
-      $("edge-node-row").style.display = "none";   // edge structure is fixed by the tiling type
+      $("edge-node-row").style.display = "";   // add/remove nodes along the chosen tile's edges
     } else {
       editor.setMode("p1");
       var edgesOn = style !== "hyperbolic";
@@ -322,7 +319,7 @@
 
   function baseEditorHint() {
     if (design.style === "isohedral")
-      return "Choose a tiling type on the left (the first group gives alternating birds-&-fish rows). Drag the dots to reshape the tile's edges — linked copies update together so tiles always interlock. Pen/Blob draw a figure inside that repeats across the tiling.";
+      return "Choose a tiling type on the left (the first group gives alternating birds-&-fish rows). Drag the dots to reshape the tile's edges; use + Add node / − Remove (or double-click an edge) to add detail — on symmetric edges a matching node appears on the linked half. Pen/Blob draw a figure that repeats across the tiling.";
     return design.style !== "hyperbolic"
       ? "Drag the handles to shape the tile (opposite edges are linked). Click a node to select it — its curve lever stays put: drag the gold end (angle = slope, length = curvature). Click empty space or press Esc to deselect. 'Add node' then click an edge to add detail; Pen/Blob draw features."
       : "Draw your motif with the pen or blob — it maps into every {p,q} tile (the tile is a fixed quadrilateral here).";
@@ -385,9 +382,8 @@
     $("reset-tile-btn").addEventListener("click", function () {
       if (editor) editor.cancelPending();
       if (design.style === "isohedral" && design.iso) {
-        var fresh = E.isohedral.defaultIso(design.iso.type);
-        design.iso.edges = fresh.edges; design.iso.params = fresh.params;
-        editor._view = null; editor.draw(); schedulePreview(); toast("Edges reset to straight");
+        design.iso.edges.forEach(function (e) { e.nodes = []; });   // straighten every edge
+        editor.isoSel = null; editor._view = null; editor.draw(); updateNodeCount(); schedulePreview(); toast("Edges reset to straight");
         return;
       }
       design.topEdge = [{ x: 0, y: 0 }, { x: 0.33, y: 0 }, { x: 0.66, y: 0 }, { x: 1, y: 0 }];
