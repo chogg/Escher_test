@@ -34,8 +34,30 @@
       outline: true,
       euclid: { density: 6 },
       hyper: { p: 6, q: 4, maxCells: 340 },
-      sphere: { count: 1, density: 7, shininess: 0.55 }
+      sphere: { count: 1, density: 7, shininess: 0.55 },
+      iso: null   // lazily created (needs Tactile) when the isohedral style is first entered
     };
+  }
+
+  // Seed a fresh isohedral design with a gentle curve + a little motif so the
+  // first impression is an interlocking figure rather than blank polygons.
+  function freshIso(type) {
+    var iso = E.isohedral.defaultIso(type);
+    if (iso.edges[0] && iso.edges[0].ctrl.length >= 2) iso.edges[0].ctrl = [{ x: 0.32, y: 0.15 }, { x: 0.68, y: 0.09 }];
+    else if (iso.edges[0] && iso.edges[0].ctrl.length === 1) iso.edges[0].ctrl = [{ x: 0.3, y: 0.16 }];
+    if (iso.edges[1] && iso.edges[1].ctrl.length >= 2) iso.edges[1].ctrl = [{ x: 0.32, y: -0.12 }, { x: 0.68, y: -0.06 }];
+    // A small "eye" motif placed at the prototile's centroid and scaled to it —
+    // Tactile tiles live in per-type coordinate frames, so a fixed [0,1] guess
+    // would land outside the tile. Derive the centre from the actual corners.
+    var cs = E.isohedral.corners(iso), cx = 0, cy = 0, mnx = 1e9, mny = 1e9, mxx = -1e9, mxy = -1e9;
+    cs.forEach(function (p) { cx += p.x; cy += p.y; mnx = Math.min(mnx, p.x); mxx = Math.max(mxx, p.x); mny = Math.min(mny, p.y); mxy = Math.max(mxy, p.y); });
+    cx /= cs.length; cy /= cs.length;
+    var r = Math.min(mxx - mnx, mxy - mny) * 0.13;
+    iso.strokes = [
+      { color: "#1c140c", width: 5, fill: true, points: circlePoly(cx, cy, r, 14) },
+      { color: "#f3ead6", width: 4, fill: true, points: circlePoly(cx + r * 0.18, cy - r * 0.12, r * 0.42, 10) }
+    ];
+    return iso;
   }
 
   var design = defaultDesign();
@@ -51,6 +73,7 @@
 
   var STYLE_META = {
     euclidean: { name: "Regular tiling", preview: "plane tessellation", cell: "fundamental cell" },
+    isohedral: { name: "Escher tessellation", preview: "isohedral tiling", cell: "prototile" },
     sphere: { name: "Reflecting sphere", preview: "mirror sphere", cell: "world tile" },
     hyperbolic: { name: "Hyperbolic plane", preview: "Poincare disk", cell: "motif (maps into each tile)" }
   };
@@ -60,6 +83,9 @@
     ctx.clearRect(0, 0, W, H);
     if (d.style === "euclidean") {
       E.euclidean.render(ctx, W, H, d, {});
+    } else if (d.style === "isohedral") {
+      if (!d.iso) d.iso = freshIso();
+      E.isohedral.render(ctx, W, H, d, {});
     } else if (d.style === "sphere") {
       E.sphere.render(ctx, W, H, d, { envRes: quality === "final" ? 768 : 360 });
     } else {
@@ -117,6 +143,18 @@
       host.appendChild(sliderRow("Tile density", 3, 12, design.euclid.density, 1, function (v) {
         design.euclid.density = v; schedulePreview();
       }));
+    } else if (design.style === "isohedral") {
+      host.appendChild(isoTypePicker());
+      var m = E.isohedral.meta(design.iso.type);
+      var info = document.createElement("div");
+      info.className = "panel-hint";
+      info.innerHTML = "<b>" + (m.nick ? m.nick + " &middot; " : "") + "IH" + m.type + "</b> &mdash; " + m.poly +
+        ", " + m.edgeShapes.length + " edge shape" + (m.edgeShapes.length > 1 ? "s" : "") +
+        (m.flip ? ". Rows alternate direction (glide/mirror) &mdash; the trick behind birds &amp; fish." : ". Same-handed copies (translation/rotation).");
+      host.appendChild(info);
+      host.appendChild(sliderRow("Tiles across", 3, 10, design.iso.density || 5, 1, function (v) {
+        design.iso.density = v; schedulePreview();
+      }));
     } else if (design.style === "sphere") {
       host.appendChild(selectRow("Spheres", [["1", 1], ["2", 2], ["3", 3]], design.sphere.count, function (v) {
         design.sphere.count = +v; schedulePreview();
@@ -156,6 +194,41 @@
       design.hyper.q + " " + design.hyper.p + "-gons meet at every vertex.";
   }
   function optsRange(a, b) { var o = []; for (var i = a; i <= b; i++) o.push([String(i), i]); return o; }
+
+  // Tiling-type picker: all 81 isohedral types, grouped so the alternating-row
+  // (glide/mirror) types — the birds-&-fish kind — come first.
+  function isoTypePicker() {
+    var wrap = document.createElement("label");
+    wrap.className = "select-row";
+    wrap.appendChild(document.createTextNode("Tiling type "));
+    var sel = document.createElement("select");
+    var cat = E.isohedral.catalogue().slice().sort(function (a, b) { return a.verts - b.verts || a.type - b.type; });
+    [["Alternating rows · birds & fish", true], ["Rotations & translations", false]].forEach(function (grp) {
+      var og = document.createElement("optgroup"); og.label = grp[0];
+      cat.filter(function (c) { return c.flip === grp[1]; }).forEach(function (c) {
+        var op = document.createElement("option");
+        op.value = c.type;
+        op.textContent = "IH" + c.type + " · " + c.poly + (c.nick ? " · " + c.nick : "");
+        if (c.type === design.iso.type) op.selected = true;
+        og.appendChild(op);
+      });
+      sel.appendChild(og);
+    });
+    sel.addEventListener("change", function () { setIsoType(+sel.value); });
+    wrap.appendChild(sel);
+    return wrap;
+  }
+  function setIsoType(type) {
+    var old = design.iso || {};
+    var iso = freshIso(type);
+    if (old.strokes) iso.strokes = old.strokes;     // keep the motif across a type switch
+    if (old.density) iso.density = old.density;
+    design.iso = iso;
+    if (editor) { editor.design = design; editor._view = null; editor.draw(); }
+    buildStyleControls();
+    $("editor-hint").textContent = baseEditorHint();
+    schedulePreview();
+  }
 
   function sliderRow(label, min, max, val, step, onInput) {
     var wrap = document.createElement("label");
@@ -222,16 +295,25 @@
       };
       editor.onToast = toast;
     }
-    var edgesOn = style !== "hyperbolic";
-    editor.setEditEdges(edgesOn);
-    // toggle edges tool button visibility
     var edgesBtn = document.querySelector('.tool-btn[data-tool="edges"]');
-    edgesBtn.style.display = edgesOn ? "" : "none";
-    if (!edgesOn) selectTool("draw"); else selectTool("edges");
+    if (style === "isohedral") {
+      if (!design.iso) design.iso = freshIso();
+      editor.design = design;
+      editor.setMode("iso");
+      edgesBtn.style.display = "";
+      selectTool("edges");
+      $("edge-node-row").style.display = "none";   // edge structure is fixed by the tiling type
+    } else {
+      editor.setMode("p1");
+      var edgesOn = style !== "hyperbolic";
+      editor.setEditEdges(edgesOn);
+      edgesBtn.style.display = edgesOn ? "" : "none";
+      if (!edgesOn) selectTool("draw"); else selectTool("edges");
+      $("edge-node-row").style.display = edgesOn ? "" : "none";
+    }
 
     editor.cancelPending();
     $("editor-hint").textContent = baseEditorHint();
-    $("edge-node-row").style.display = edgesOn ? "" : "none";
     updateNodeCount();
     buildStyleControls();
     editor.draw();
@@ -239,6 +321,8 @@
   }
 
   function baseEditorHint() {
+    if (design.style === "isohedral")
+      return "Choose a tiling type on the left (the first group gives alternating birds-&-fish rows). Drag the dots to reshape the tile's edges — linked copies update together so tiles always interlock. Pen/Blob draw a figure inside that repeats across the tiling.";
     return design.style !== "hyperbolic"
       ? "Drag the handles to shape the tile (opposite edges are linked). Click a node to select it — its curve lever stays put: drag the gold end (angle = slope, length = curvature). Click empty space or press Esc to deselect. 'Add node' then click an edge to add detail; Pen/Blob draw features."
       : "Draw your motif with the pen or blob — it maps into every {p,q} tile (the tile is a fixed quadrilateral here).";
@@ -290,14 +374,22 @@
     $("colorBg").addEventListener("input", function () { design.colorBg = this.value; editor.draw(); schedulePreview(); });
     $("outline-toggle").addEventListener("change", function () { design.outline = this.checked; editor.draw(); schedulePreview(); });
     // strokes
+    function motifStrokes() { return (design.style === "isohedral" && design.iso) ? design.iso.strokes : design.strokes; }
     $("undo-btn").addEventListener("click", function () {
-      design.strokes.pop(); editor.draw(); schedulePreview();
+      var s = motifStrokes(); if (s && s.length) s.pop(); editor.draw(); schedulePreview();
     });
     $("clear-btn").addEventListener("click", function () {
-      design.strokes = []; editor.draw(); schedulePreview(); toast("Ink cleared");
+      if (design.style === "isohedral" && design.iso) design.iso.strokes = []; else design.strokes = [];
+      editor.draw(); schedulePreview(); toast("Ink cleared");
     });
     $("reset-tile-btn").addEventListener("click", function () {
       if (editor) editor.cancelPending();
+      if (design.style === "isohedral" && design.iso) {
+        var fresh = E.isohedral.defaultIso(design.iso.type);
+        design.iso.edges = fresh.edges; design.iso.params = fresh.params;
+        editor._view = null; editor.draw(); schedulePreview(); toast("Edges reset to straight");
+        return;
+      }
       design.topEdge = [{ x: 0, y: 0 }, { x: 0.33, y: 0 }, { x: 0.66, y: 0 }, { x: 1, y: 0 }];
       design.leftEdge = [{ x: 0, y: 0 }, { x: 0, y: 0.33 }, { x: 0, y: 0.66 }, { x: 0, y: 1 }];
       editor.draw(); updateNodeCount(); schedulePreview(); toast("Tile reset to a square");
@@ -332,6 +424,7 @@
       var ctx = cv.getContext("2d");
       try {
         if (d.style === "euclidean") { d.euclid.density = 4; E.euclidean.render(ctx, cv.width, cv.height, d, {}); }
+        else if (d.style === "isohedral") { d.iso = freshIso(43); d.iso.density = 3.2; E.isohedral.render(ctx, cv.width, cv.height, d, {}); }
         else if (d.style === "sphere") { d.sphere.density = 5; E.sphere.render(ctx, cv.width, cv.height, d, { envRes: 256 }); }
         else { d.hyper = { p: 6, q: 4, maxCells: 160 }; E.hyperbolic.render(ctx, cv.width, cv.height, d, { maxCells: 160 }); }
       } catch (err) { console.error("thumb", d.style, err); }
